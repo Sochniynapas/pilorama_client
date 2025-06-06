@@ -235,15 +235,23 @@ const handleMouseDown = (e) => {
     return `${day}.${month}.${year}`;
   };
 
- const handleCanvasClick = (e) => {
+const handleCanvasClick = (e) => {
   if (!image || !isClick || isDragging) return;
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
 
   // Получаем координаты касания
-  const clientX = e.clientX || (e.touches && e.touches[0].clientX) || (e.changedTouches && e.changedTouches[0].clientX);
-  const clientY = e.clientY || (e.touches && e.touches[0].clientY) || (e.changedTouches && e.changedTouches[0].clientY);
+  let clientX, clientY;
+  if (e.touches && e.touches.length > 0) {
+    // Для мобильных устройств
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
+  } else {
+    // Для десктопов
+    clientX = e.clientX;
+    clientY = e.clientY;
+  }
 
   if (!clientX || !clientY) return;
 
@@ -311,6 +319,8 @@ const handleMouseDown = (e) => {
     setBoardMarks([...boardMarks, newMark]);
   }
 };
+
+
 
 
 
