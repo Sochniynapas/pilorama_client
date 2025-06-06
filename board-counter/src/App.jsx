@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, addEventListener } from 'react';
 import { Container, Row, Col, Form, Button, Table, Alert } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
@@ -32,6 +32,8 @@ function App() {
   const clickTimerRef = useRef(null); // Таймер для отслеживания длительности нажатия
   const [initialDistance, setInitialDistance] = useState(null);
   const dynamicMarkerSize = markerSize * zoomLevel * (isMobile ? 2 : 1); // Увеличиваем в 2 раза на мобильных устройствах
+  const [isColorPickerActive, setIsColorPickerActive] = useState(false);
+
 
   // 10 стандартных цветов
   const standardColors = [
@@ -60,6 +62,128 @@ function App() {
       reader.readAsDataURL(file);
     }
   };
+  const handleDesktopClick = (e) => {
+  if (!image || !isClick || isDragging) return;
+
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
+
+  // Получаем координаты клика относительно окна браузера
+  const clientX = e.clientX;
+  const clientY = e.clientY;
+
+  if (!clientX || !clientY) return;
+
+  // Корректный расчет координат относительно холста
+  const scaleX = canvas.width / rect.width; // Соотношение ширины холста и его отображения
+  const scaleY = canvas.height / rect.height; // Соотношение высоты холста и его отображения
+
+  // Координаты относительно холста с учетом масштабирования и смещения
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
+
+  // Применяем масштабирование и смещение
+  const correctedX = (x - canvasOffset.x) / zoomLevel;
+  const correctedY = (y - canvasOffset.y) / zoomLevel;
+
+  processClick(correctedX, correctedY); // Общая функция для обработки клика
+};
+
+const handleMobileClick = (e) => {
+  if (!image || !isClick || isDragging) return;
+
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
+
+  // Получаем координаты касания
+  const touch = e.changedTouches[0]; // Используем changedTouches для touchend
+  const clientX = touch.clientX;
+  const clientY = touch.clientY;
+
+  if (!clientX || !clientY) return;
+
+  // Корректный расчет координат относительно холста
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  // Координаты относительно холста с учетом масштабирования и смещения
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
+
+  // Применяем масштабирование и смещение
+  const correctedX = (x - canvasOffset.x) / zoomLevel;
+  const correctedY = (y - canvasOffset.y) / zoomLevel;
+
+  processClick(correctedX, correctedY); // Общая функция для обработки клика
+};
+
+
+
+
+
+const processClick = (x, y) => {
+  const clickedMark = boardMarks.find(mark => {
+    const distance = Math.sqrt((mark.x - x) ** 2 + (mark.y - y) ** 2);
+    return distance <= dynamicMarkerSize;
+  });
+
+  if (clickedMark) {
+    console.log("Удаляем метку:", clickedMark); // Отладка
+    deleteMark(clickedMark);
+    return;
+  }
+
+  if (selectedLog) {
+    const nextNumber = logs.find(log => log.id === selectedLog.id).nextMarkId;
+
+    const newMark = {
+      id: Date.now(),
+      x,
+      y,
+      logId: selectedLog.id,
+      color: selectedLog.color,
+      number: nextNumber,
+      size: dynamicMarkerSize,
+    };
+
+    console.log("Добавляем метку:", newMark); // Отладка
+    setLogs(logs.map(log =>
+      log.id === selectedLog.id
+        ? { ...log, nextMarkId: nextNumber + 1 }
+        : log
+    ));
+
+    setBoardMarks([...boardMarks, newMark]);
+  }
+};
+
+const deleteMark = (clickedMark) => {
+  const updatedMarks = boardMarks.filter(mark => mark.id !== clickedMark.id);
+
+  const marksForLog = updatedMarks
+    .filter(mark => mark.logId === clickedMark.logId)
+    .sort((a, b) => a.number - b.number);
+
+  const renumberedMarks = updatedMarks.map(mark => {
+    if (mark.logId === clickedMark.logId) {
+      const newNumber = marksForLog.findIndex(m => m.id === mark.id) + 1;
+      return { ...mark, number: newNumber };
+    }
+    return mark;
+  });
+
+  const maxNumber = renumberedMarks
+    .filter(mark => mark.logId === clickedMark.logId)
+    .reduce((max, mark) => Math.max(max, mark.number), 0);
+
+  setLogs(logs.map(log =>
+    log.id === clickedMark.logId
+      ? { ...log, nextMarkId: maxNumber + 1 }
+      : log
+  ));
+
+  setBoardMarks(renumberedMarks);
+};
 
   // Обработчики для масштабирования и перемещения
   const handleWheel = (e) => {
@@ -139,6 +263,7 @@ const handleTouchMove = (e) => {
 const handleTouchEnd = () => {
   setIsDragging(false);
   setInitialDistance(null);
+  setIsClick(true); // Устанавливаем isClick в true после завершения касания
 };
 const handleMouseLeave = () => {
   setIsHovered(false);
@@ -163,17 +288,18 @@ const handleMouseDown = (e) => {
     }, 150); // Порог для определения долгого нажатия (150 мс)
   }
 };
-  const handleLogSelect = (log) => {
-    if (selectedLog?.id === log.id) {
-        // Если кликаем на уже выбранное бревно - снимаем выбор
-        setSelectedLog(null);
-        setIsColorPickerActive(false);
-    } else {
-        // Выбираем новое бревно
-        setSelectedLog(log);
-        setIsColorPickerActive(true);
-    }
+const handleLogSelect = (log) => {
+  if (selectedLog?.id === log.id) {
+    // Если кликаем на уже выбранное бревно - снимаем выбор
+    setSelectedLog(null);
+    setIsColorPickerActive(false);
+  } else {
+    // Выбираем новое бревно
+    setSelectedLog(log);
+    setIsColorPickerActive(true);
+  }
 };
+
   const handleMouseMove = (e) => {
   if (!isDragging) return;
 
@@ -478,6 +604,33 @@ const handleCanvasClick = (e) => {
       document.body.style.overflow = ''; // Убедимся, что скролл восстановится
     };
   }, []);
+  useEffect(() => {
+  const canvasContainer = canvasContainerRef.current;
+
+  // Проверяем, существует ли элемент
+  if (!canvasContainer) return;
+
+  // Блокируем стандартное поведение для касаний
+  const preventScroll = (e) => {
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+  };
+
+  // Регистрируем обработчик с { passive: false }
+  canvasContainer.addEventListener('touchstart', handleMobileClick, { passive: false });
+  canvasContainer.addEventListener('touchmove', preventScroll, { passive: false });
+
+  // Убираем обработчик при размонтировании
+  return () => {
+    canvasContainer.removeEventListener('touchstart', handleMobileClick, { passive: false });
+    canvasContainer.removeEventListener('touchmove', preventScroll, { passive: false });
+  };
+}, []); // Зависимости отсутствуют
+
+
+
+  
   return (
     <Container className="my-4">
       <h1 className="text-center mb-4">Учет досок на фотографии</h1>
@@ -669,7 +822,7 @@ const handleCanvasClick = (e) => {
           {image ? (
             <>
               <div className="position-relative">
-                <div 
+                <div
                   ref={canvasContainerRef}
                   className='canvas-container'
                   style={{ 
@@ -679,27 +832,26 @@ const handleCanvasClick = (e) => {
                     cursor: isDragging ? 'grabbing' : selectedLog ? 'crosshair' : 'grab',
                     touchAction: 'none'
                   }}
-                  
                   onMouseEnter={handleMouseEnter}
                   onMouseLeave={handleMouseLeave}
                   onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
                   onWheel={handleWheel}
-                  onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
+                  onTouchEnd={handleTouchEnd} // Используем handleMobileClick для мобильных устройств
                 >
-                  <canvas
-                    ref={canvasRef}
-                    onClick={handleCanvasClick}
-                    onTouchEnd={handleCanvasClick}
-                    style={{ 
-                      transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
-                      transformOrigin: '0 0'
-                    }}
-                  />
+                 <canvas
+                  ref={canvasRef}
+                  onClick={!isMobile ? handleDesktopClick : null} // Для десктопа
+                  onTouchEnd={isMobile ? handleMobileClick : null} // Для мобильных устройств
+                  style={{ 
+                    transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
+                    transformOrigin: '0 0'
+                  }}
+                />
                 </div>
+
                 <div className="mt-2 d-flex justify-content-between">
                   <Button 
                     variant="secondary" 
