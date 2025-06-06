@@ -62,7 +62,7 @@ function App() {
       reader.readAsDataURL(file);
     }
   };
-  const handleDesktopClick = (e) => {
+const handleDesktopClick = (e) => {
   if (!image || !isClick || isDragging) return;
 
   const canvas = canvasRef.current;
@@ -74,43 +74,43 @@ function App() {
 
   if (!clientX || !clientY) return;
 
-  // Корректный расчет координат относительно холста
-  const scaleX = canvas.width / rect.width; // Соотношение ширины холста и его отображения
-  const scaleY = canvas.height / rect.height; // Соотношение высоты холста и его отображения
-
-  // Координаты относительно холста с учетом масштабирования и смещения
-  const x = (clientX - rect.left) * scaleX;
-  const y = (clientY - rect.top) * scaleY;
-
-  // Применяем масштабирование и смещение
-  const correctedX = (x - canvasOffset.x) / zoomLevel;
-  const correctedY = (y - canvasOffset.y) / zoomLevel;
-
-  processClick(correctedX, correctedY); // Общая функция для обработки клика
-};
-
-const handleMobileClick = (e) => {
-  if (!image || isDragging) return; // Убрана проверка !isClick, так как она может мешать
-
-  const canvas = canvasRef.current;
-  const rect = canvas.getBoundingClientRect();
-  const touch = e.changedTouches[0]; // Используем первое касание
-
-  // Координаты касания относительно контейнера холста
-  const clientX = touch.clientX - rect.left;
-  const clientY = touch.clientY - rect.top;
-
-  if (!clientX || !clientY) return;
-
-  // Учитываем соотношение физических и CSS пикселей
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
 
-  // Корректируем координаты с учетом масштабирования и смещения
-  const x = (clientX * scaleX - canvasOffset.x) / zoomLevel;
-  const y = (clientY * scaleY - canvasOffset.y) / zoomLevel;
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
 
-  processClick(x, y); // Вызов общей функции обработки клика
+  const correctedX = (x - canvasOffset.x) / zoomLevel;
+  const correctedY = (y - canvasOffset.y) / zoomLevel;
+
+  processClick(correctedX, correctedY);
+};
+
+const handleMobileClick = (e) => {
+  if (!image || isDragging) return;
+
+  const canvas = canvasRef.current;
+  const rect = canvasContainerRef.current.getBoundingClientRect(); // Получаем прямоугольник контейнера, а не canvas
+
+  const touch = e.touches[0] || e.changedTouches[0];
+  if (!touch) return;
+
+  const clientX = touch.clientX - rect.left;
+  const clientY = touch.clientY - rect.top;
+
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+
+  const scaleX = canvasWidth / rect.width;
+  const scaleY = canvasHeight / rect.height;
+
+  const rawX = clientX * scaleX;
+  const rawY = clientY * scaleY;
+
+  const x = (rawX - canvasOffset.x) / zoomLevel;
+  const y = (rawY - canvasOffset.y) / zoomLevel;
+
+  processClick(x, y);
 };
 
 
