@@ -242,8 +242,10 @@ const handleMouseDown = (e) => {
   const rect = canvas.getBoundingClientRect();
 
   // Получаем координаты касания
-  const clientX = e.clientX || e.touches[0].clientX;
-  const clientY = e.clientY || e.touches[0].clientY;
+  const clientX = e.clientX || (e.touches && e.touches[0].clientX) || (e.changedTouches && e.changedTouches[0].clientX);
+  const clientY = e.clientY || (e.touches && e.touches[0].clientY) || (e.changedTouches && e.changedTouches[0].clientY);
+
+  if (!clientX || !clientY) return;
 
   // Корректный расчет координат с учетом масштаба и смещения
   const scaleX = canvas.width / rect.width;
@@ -309,6 +311,7 @@ const handleMouseDown = (e) => {
     setBoardMarks([...boardMarks, newMark]);
   }
 };
+
 
 
   useEffect(() => {
@@ -680,6 +683,7 @@ const handleMouseDown = (e) => {
                   <canvas
                     ref={canvasRef}
                     onClick={handleCanvasClick}
+                    onTouchEnd={handleCanvasClick}
                     style={{ 
                       transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
                       transformOrigin: '0 0'
