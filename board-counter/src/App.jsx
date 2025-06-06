@@ -95,56 +95,50 @@ const handleMouseEnter = () => {
 };
 
 const handleTouchStart = (e) => {
-  if (e.touches.length === 2) {
-    // Если два пальца на экране, начинаем масштабирование
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({
+      x: touch.clientX - canvasOffset.x,
+      y: touch.clientY - canvasOffset.y,
+    });
+  } else if (e.touches.length === 2) {
     const dist = Math.hypot(
       e.touches[0].clientX - e.touches[1].clientX,
       e.touches[0].clientY - e.touches[1].clientY
     );
     setInitialDistance(dist);
-  } else if (e.touches.length === 1) {
-    // Одно касание: обработка клика или перетаскивания
-    handleMouseDown({
-      button: 0,
-      clientX: e.touches[0].clientX,
-      clientY: e.touches[0].clientY,
-      cancelable: true,
-      preventDefault: () => e.preventDefault(),
-    });
   }
 };
 
 const handleTouchMove = (e) => {
-  if (e.touches.length === 2) {
+  if (!isDragging) return;
+
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    const dx = touch.clientX - dragStart.x;
+    const dy = touch.clientY - dragStart.y;
+
+    setCanvasOffset({
+      x: dx,
+      y: dy,
+    });
+  } else if (e.touches.length === 2) {
     const dist = Math.hypot(
       e.touches[0].clientX - e.touches[1].clientX,
       e.touches[0].clientY - e.touches[1].clientY
     );
     if (initialDistance !== null) {
       const scale = dist / initialDistance;
-      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * (1 + (scale - 1) * 0.1))); // Коэффициент 0.1 для плавности
+      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * (1 + (scale - 1) * 0.1))); // Плавный зум
       setZoomLevel(newZoom);
     }
-  } else if (e.touches.length === 1 && isDragging) {
-    handleMouseMove({
-      clientX: e.touches[0].clientX,
-      clientY: e.touches[0].clientY,
-      cancelable: true,
-      preventDefault: () => e.preventDefault(),
-    });
   }
 };
 
-const handleTouchEnd = (e) => {
-  if (!isDragging && isClick) {
-    handleCanvasClick({
-      clientX: e.changedTouches[0].clientX,
-      clientY: e.changedTouches[0].clientY,
-      preventDefault: () => e.preventDefault(),
-    });
-  }
+const handleTouchEnd = () => {
+  setIsDragging(false);
   setInitialDistance(null);
-  handleMouseUp();
 };
 const handleMouseLeave = () => {
   setIsHovered(false);
@@ -242,21 +236,25 @@ const handleMouseDown = (e) => {
   };
 
  const handleCanvasClick = (e) => {
-  if (!image || !isClick || isDragging) return; // Не ставим точки, если это не клик или идет перетаскивание
+  if (!image || !isClick || isDragging) return;
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
 
+  // Получаем координаты касания
+  const clientX = e.clientX || e.touches[0].clientX;
+  const clientY = e.clientY || e.touches[0].clientY;
+
   // Корректный расчет координат с учетом масштаба и смещения
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-  const x = ((e.clientX - rect.left) * scaleX - canvasOffset.x) / zoomLevel;
-  const y = ((e.clientY - rect.top) * scaleY - canvasOffset.y) / zoomLevel;
+  const x = ((clientX - rect.left) * scaleX - canvasOffset.x) / zoomLevel;
+  const y = ((clientY - rect.top) * scaleY - canvasOffset.y) / zoomLevel;
 
   // Проверяем, не кликнули ли мы по существующей метке
   const clickedMark = boardMarks.find(mark => {
     const distance = Math.sqrt((mark.x - x) ** 2 + (mark.y - y) ** 2);
-    return distance <= dynamicMarkerSize; // Используем dynamicMarkerSize
+    return distance <= dynamicMarkerSize;
   });
 
   if (clickedMark) {
@@ -299,7 +297,7 @@ const handleMouseDown = (e) => {
       logId: selectedLog.id,
       color: selectedLog.color,
       number: nextNumber,
-      size: dynamicMarkerSize // Используем dynamicMarkerSize
+      size: dynamicMarkerSize,
     };
 
     setLogs(logs.map(log =>
