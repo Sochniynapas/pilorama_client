@@ -153,25 +153,25 @@ function App() {
     processClick(x, y);
   };
 
-  const handleMobileClick = (e) => {
-    if (!image || isDragging) return;
+const handleMobileClick = (e) => {
+  if (!image || isDragging) return;
 
-    const canvas = canvasRef.current;
-    const rect = canvasContainerRef.current.getBoundingClientRect(); // Контейнер, а не canvas
-    const touch = e.touches[0] || e.changedTouches[0];
-    if (!touch) return;
+  const canvas = canvasRef.current;
+  const container = canvasContainerRef.current;
+  const touch = e.touches[0] || e.changedTouches[0];
+  if (!touch) return;
 
-    const clientX = touch.clientX - rect.left;
-    const clientY = touch.clientY - rect.top;
+  // Получаем координаты касания относительно контейнера
+  const containerRect = container.getBoundingClientRect();
+  const touchX = touch.clientX - containerRect.left;
+  const touchY = touch.clientY - containerRect.top;
 
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+  // Переводим в координаты canvas до применения transform
+  const x = ((touchX * canvas.width / containerRect.width) - canvasOffset.x) / zoomLevel;
+  const y = ((touchY * canvas.height / containerRect.height) - canvasOffset.y) / zoomLevel;
 
-    const x = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
-    const y = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
-
-    processClick(x, y);
-  };
+  processClick(x, y);
+};
   const handleMouseEnter = () => {
     document.body.style.overflow = 'hidden';
   };
