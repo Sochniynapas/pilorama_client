@@ -11,6 +11,7 @@ body {
   position: relative;
   border: 1px solid #ccc;
   background: #f8f9fa;
+  overflow: hidden !important
 }
 
 canvas {
@@ -25,7 +26,9 @@ canvas {
     zoom: 1.5; /* Увеличение масштаба маркеров */
   }
 }
-
+canvas {
+  transition: transform 0.2s ease; /* Плавный зум */
+}
 /* Стили для цветового пикера */
 .react-colorful {
   width: 100% !important;

@@ -26,11 +26,12 @@ function App() {
   const fileInputRef = useRef(null);
   const colorPreviewRef = useRef(null);
   const [documentNumber, setDocumentNumber] = useState('');
+  const [isHovered, setIsHovered] = useState(false);
   const canvasContainerRef = useRef(null);
   const [isClick, setIsClick] = useState(true); // Флаг для определения клика
   const clickTimerRef = useRef(null); // Таймер для отслеживания длительности нажатия
   const [initialDistance, setInitialDistance] = useState(null);
-  const dynamicMarkerSize = markerSize * zoomLevel;
+  const dynamicMarkerSize = markerSize * zoomLevel * (isMobile ? 2 : 1); // Увеличиваем в 2 раза на мобильных устройствах
 
   // 10 стандартных цветов
   const standardColors = [
@@ -88,9 +89,9 @@ function App() {
   setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 };
 
-  const handleMouseEnter = () => {
+const handleMouseEnter = () => {
   setIsHovered(true);
-  document.body.style.overflow = 'hidden'; // Отключаем скролл страницы
+  document.body.style.overflow = 'hidden';
 };
 
 const handleTouchStart = (e) => {
@@ -115,18 +116,16 @@ const handleTouchStart = (e) => {
 
 const handleTouchMove = (e) => {
   if (e.touches.length === 2) {
-    // Масштабирование двумя пальцами
     const dist = Math.hypot(
       e.touches[0].clientX - e.touches[1].clientX,
       e.touches[0].clientY - e.touches[1].clientY
     );
     if (initialDistance !== null) {
       const scale = dist / initialDistance;
-      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale)); // Ограничиваем масштаб
+      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * (1 + (scale - 1) * 0.1))); // Коэффициент 0.1 для плавности
       setZoomLevel(newZoom);
     }
   } else if (e.touches.length === 1 && isDragging) {
-    // Перетаскивание одним пальцем
     handleMouseMove({
       clientX: e.touches[0].clientX,
       clientY: e.touches[0].clientY,
@@ -136,14 +135,21 @@ const handleTouchMove = (e) => {
   }
 };
 
-const handleTouchEnd = () => {
-  setInitialDistance(null); // Сбрасываем расстояние для масштабирования
-  handleMouseUp(); // Завершаем перетаскивание
+const handleTouchEnd = (e) => {
+  if (!isDragging && isClick) {
+    handleCanvasClick({
+      clientX: e.changedTouches[0].clientX,
+      clientY: e.changedTouches[0].clientY,
+      preventDefault: () => e.preventDefault(),
+    });
+  }
+  setInitialDistance(null);
+  handleMouseUp();
 };
 const handleMouseLeave = () => {
-  setIsDragging(false);
   setIsHovered(false);
-  document.body.style.overflow = ''; // Восстанавливаем скролл страницы
+  setIsDragging(false);
+  document.body.style.overflow = '';
 };
 const handleMouseDown = (e) => {
   if (e.button === 0) { // Левая кнопка мыши
@@ -250,7 +256,7 @@ const handleMouseDown = (e) => {
   // Проверяем, не кликнули ли мы по существующей метке
   const clickedMark = boardMarks.find(mark => {
     const distance = Math.sqrt((mark.x - x) ** 2 + (mark.y - y) ** 2);
-    return distance <= markerSize;
+    return distance <= dynamicMarkerSize; // Используем dynamicMarkerSize
   });
 
   if (clickedMark) {
@@ -293,7 +299,7 @@ const handleMouseDown = (e) => {
       logId: selectedLog.id,
       color: selectedLog.color,
       number: nextNumber,
-      size: markerSize
+      size: dynamicMarkerSize // Используем dynamicMarkerSize
     };
 
     setLogs(logs.map(log =>
@@ -305,6 +311,7 @@ const handleMouseDown = (e) => {
     setBoardMarks([...boardMarks, newMark]);
   }
 };
+
 
   useEffect(() => {
     if (!image) return;
@@ -337,7 +344,7 @@ const handleMouseDown = (e) => {
 
   const drawMark = (ctx, x, y, color, number) => {
     ctx.beginPath();
-    ctx.arc(x, y, dynamicMarkerSize, 0, 2 * Math.PI); // Динамический размер
+    ctx.arc(x, y, dynamicMarkerSize, 0, 2 * Math.PI); // Используем dynamicMarkerSize
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = '#fff';
@@ -345,7 +352,7 @@ const handleMouseDown = (e) => {
     ctx.stroke();
 
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px Arial';
+    ctx.font = `bold ${dynamicMarkerSize * 0.8}px Arial`; // Динамический размер текста
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(number.toString(), x, y);
@@ -653,6 +660,7 @@ const handleMouseDown = (e) => {
               <div className="position-relative">
                 <div 
                   ref={canvasContainerRef}
+                  className='canvas-container'
                   style={{ 
                     overflow: 'hidden',
                     border: '1px solid #ddd',
