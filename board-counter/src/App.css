@@ -20,6 +20,11 @@ canvas {
   cursor: crosshair;
 }
 
+@media (max-width: 768px) {
+  canvas {
+    zoom: 1.5; /* Увеличение масштаба маркеров */
+  }
+}
 
 /* Стили для цветового пикера */
 .react-colorful {

@@ -6,6 +6,8 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 function App() {
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
   const [image, setImage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [width, setWidth] = useState('');
@@ -13,7 +15,7 @@ function App() {
   const [color, setColor] = useState('#ff0000');
   const [selectedLog, setSelectedLog] = useState(null);
   const [boardMarks, setBoardMarks] = useState([]);
-  const [markerSize, setMarkerSize] = useState(20);
+  const [markerSize, setMarkerSize] = useState(isMobile ? 40 : 20); // Увеличиваем размер для мобильных устройств
   const [showColorPalette, setShowColorPalette] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -25,8 +27,10 @@ function App() {
   const colorPreviewRef = useRef(null);
   const [documentNumber, setDocumentNumber] = useState('');
   const canvasContainerRef = useRef(null);
-  const [isColorPickerActive, setIsColorPickerActive] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const [isClick, setIsClick] = useState(true); // Флаг для определения клика
+  const clickTimerRef = useRef(null); // Таймер для отслеживания длительности нажатия
+  const [initialDistance, setInitialDistance] = useState(null);
+  const dynamicMarkerSize = markerSize * zoomLevel;
 
   // 10 стандартных цветов
   const standardColors = [
@@ -88,49 +92,75 @@ function App() {
   setIsHovered(true);
   document.body.style.overflow = 'hidden'; // Отключаем скролл страницы
 };
+
 const handleTouchStart = (e) => {
-  if (e.touches.length === 1) {
+  if (e.touches.length === 2) {
+    // Если два пальца на экране, начинаем масштабирование
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    setInitialDistance(dist);
+  } else if (e.touches.length === 1) {
+    // Одно касание: обработка клика или перетаскивания
     handleMouseDown({
       button: 0,
       clientX: e.touches[0].clientX,
       clientY: e.touches[0].clientY,
       cancelable: true,
-      preventDefault: () => e.preventDefault()
+      preventDefault: () => e.preventDefault(),
     });
   }
 };
 
 const handleTouchMove = (e) => {
-  if (e.touches.length === 1) {
+  if (e.touches.length === 2) {
+    // Масштабирование двумя пальцами
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    if (initialDistance !== null) {
+      const scale = dist / initialDistance;
+      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale)); // Ограничиваем масштаб
+      setZoomLevel(newZoom);
+    }
+  } else if (e.touches.length === 1 && isDragging) {
+    // Перетаскивание одним пальцем
     handleMouseMove({
       clientX: e.touches[0].clientX,
       clientY: e.touches[0].clientY,
       cancelable: true,
-      preventDefault: () => e.preventDefault()
+      preventDefault: () => e.preventDefault(),
     });
-    e.preventDefault();
   }
 };
 
 const handleTouchEnd = () => {
-  handleMouseUp();
+  setInitialDistance(null); // Сбрасываем расстояние для масштабирования
+  handleMouseUp(); // Завершаем перетаскивание
 };
 const handleMouseLeave = () => {
   setIsDragging(false);
   setIsHovered(false);
   document.body.style.overflow = ''; // Восстанавливаем скролл страницы
 };
-  const handleMouseDown = (e) => {
-  if (e.button === 0) { // левая кнопка мыши
+const handleMouseDown = (e) => {
+  if (e.button === 0) { // Левая кнопка мыши
     // Проверяем, можно ли вызвать preventDefault
     if (e.cancelable) {
       e.preventDefault();
     }
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - canvasOffset.x,
-      y: e.clientY - canvasOffset.y
-    });
+
+    // Устанавливаем таймер для отслеживания длительности нажатия
+    clickTimerRef.current = setTimeout(() => {
+      setIsClick(false); // Если таймер истек, это не клик
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - canvasOffset.x,
+        y: e.clientY - canvasOffset.y
+      });
+    }, 150); // Порог для определения долгого нажатия (150 мс)
   }
 };
   const handleLogSelect = (log) => {
@@ -146,24 +176,33 @@ const handleMouseLeave = () => {
 };
   const handleMouseMove = (e) => {
   if (!isDragging) return;
-  
+
   // Проверяем, можно ли вызвать preventDefault
   if (e.cancelable) {
     e.preventDefault();
   }
-  
+
   const dx = e.clientX - dragStart.x;
   const dy = e.clientY - dragStart.y;
-  
+
   setCanvasOffset({
     x: dx,
     y: dy
   });
 };
 
-  const handleMouseUp = () => {
+   const handleMouseUp = () => {
+  if (clickTimerRef.current) {
+    clearTimeout(clickTimerRef.current); // Очищаем таймер
+  }
+
+  if (isDragging) {
     setIsDragging(false);
-  };
+    setIsClick(false); // Если было перетаскивание, не считаем это кликом
+  } else {
+    setIsClick(true); // Если не было перетаскивания, это клик
+  }
+};
 
   const resetZoomAndPan = () => {
     setZoomLevel(1);
@@ -197,74 +236,74 @@ const handleMouseLeave = () => {
   };
 
  const handleCanvasClick = (e) => {
-    if (!image || isDragging) return; // Не ставим точки при перетаскивании
+  if (!image || !isClick || isDragging) return; // Не ставим точки, если это не клик или идет перетаскивание
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Корректный расчет координат с учетом масштаба и смещения
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = ((e.clientX - rect.left) * scaleX - canvasOffset.x) / zoomLevel;
-    const y = ((e.clientY - rect.top) * scaleY - canvasOffset.y) / zoomLevel;
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
 
-    // Проверяем, не кликнули ли мы по существующей метке
-    const clickedMark = boardMarks.find(mark => {
-        const distance = Math.sqrt((mark.x - x) ** 2 + (mark.y - y) ** 2);
-        return distance <= markerSize;
+  // Корректный расчет координат с учетом масштаба и смещения
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = ((e.clientX - rect.left) * scaleX - canvasOffset.x) / zoomLevel;
+  const y = ((e.clientY - rect.top) * scaleY - canvasOffset.y) / zoomLevel;
+
+  // Проверяем, не кликнули ли мы по существующей метке
+  const clickedMark = boardMarks.find(mark => {
+    const distance = Math.sqrt((mark.x - x) ** 2 + (mark.y - y) ** 2);
+    return distance <= markerSize;
+  });
+
+  if (clickedMark) {
+    // Удаление метки и перенумерация
+    const updatedMarks = boardMarks.filter(mark => mark.id !== clickedMark.id);
+
+    const marksForLog = updatedMarks
+      .filter(mark => mark.logId === clickedMark.logId)
+      .sort((a, b) => a.number - b.number);
+
+    const renumberedMarks = updatedMarks.map(mark => {
+      if (mark.logId === clickedMark.logId) {
+        const newNumber = marksForLog.findIndex(m => m.id === mark.id) + 1;
+        return { ...mark, number: newNumber };
+      }
+      return mark;
     });
 
-    if (clickedMark) {
-        // Удаление метки и перенумерация
-        const updatedMarks = boardMarks.filter(mark => mark.id !== clickedMark.id);
-        
-        const marksForLog = updatedMarks
-            .filter(mark => mark.logId === clickedMark.logId)
-            .sort((a, b) => a.number - b.number);
-        
-        const renumberedMarks = updatedMarks.map(mark => {
-            if (mark.logId === clickedMark.logId) {
-                const newNumber = marksForLog.findIndex(m => m.id === mark.id) + 1;
-                return { ...mark, number: newNumber };
-            }
-            return mark;
-        });
+    const maxNumber = renumberedMarks
+      .filter(mark => mark.logId === clickedMark.logId)
+      .reduce((max, mark) => Math.max(max, mark.number), 0);
 
-        const maxNumber = renumberedMarks
-            .filter(mark => mark.logId === clickedMark.logId)
-            .reduce((max, mark) => Math.max(max, mark.number), 0);
+    setLogs(logs.map(log =>
+      log.id === clickedMark.logId
+        ? { ...log, nextMarkId: maxNumber + 1 }
+        : log
+    ));
 
-        setLogs(logs.map(log => 
-            log.id === clickedMark.logId 
-                ? { ...log, nextMarkId: maxNumber + 1 } 
-                : log
-        ));
+    setBoardMarks(renumberedMarks);
+    return;
+  }
 
-        setBoardMarks(renumberedMarks);
-        return;
-    }
+  if (selectedLog) {
+    const nextNumber = logs.find(log => log.id === selectedLog.id).nextMarkId;
 
-    if (selectedLog) {
-        const nextNumber = logs.find(log => log.id === selectedLog.id).nextMarkId;
-        
-        const newMark = {
-            id: Date.now(),
-            x,
-            y,
-            logId: selectedLog.id,
-            color: selectedLog.color,
-            number: nextNumber,
-            size: markerSize
-        };
+    const newMark = {
+      id: Date.now(),
+      x,
+      y,
+      logId: selectedLog.id,
+      color: selectedLog.color,
+      number: nextNumber,
+      size: markerSize
+    };
 
-        setLogs(logs.map(log => 
-            log.id === selectedLog.id 
-                ? { ...log, nextMarkId: nextNumber + 1 } 
-                : log
-        ));
+    setLogs(logs.map(log =>
+      log.id === selectedLog.id
+        ? { ...log, nextMarkId: nextNumber + 1 }
+        : log
+    ));
 
-        setBoardMarks([...boardMarks, newMark]);
-    }
+    setBoardMarks([...boardMarks, newMark]);
+  }
 };
 
   useEffect(() => {
@@ -298,13 +337,13 @@ const handleMouseLeave = () => {
 
   const drawMark = (ctx, x, y, color, number) => {
     ctx.beginPath();
-    ctx.arc(x, y, markerSize, 0, 2 * Math.PI);
+    ctx.arc(x, y, dynamicMarkerSize, 0, 2 * Math.PI); // Динамический размер
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.stroke();
-    
+
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
