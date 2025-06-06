@@ -94,32 +94,21 @@ const handleMobileClick = (e) => {
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
+  const touch = e.changedTouches[0]; // Используем первое касание
 
-  // Получаем координаты касания
-  const touch = e.changedTouches[0]; // Используем changedTouches для touchend
   const clientX = touch.clientX;
   const clientY = touch.clientY;
 
   if (!clientX || !clientY) return;
 
-  // Корректный расчет координат относительно холста
+  // Корректный расчет координат с учетом масштабирования и смещения
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
+  const x = ((clientX - rect.left) * scaleX - canvasOffset.x) / zoomLevel;
+  const y = ((clientY - rect.top) * scaleY - canvasOffset.y) / zoomLevel;
 
-  // Координаты относительно холста с учетом масштабирования и смещения
-  const x = (clientX - rect.left) * scaleX;
-  const y = (clientY - rect.top) * scaleY;
-
-  // Применяем масштабирование и смещение
-  const correctedX = (x - canvasOffset.x) / zoomLevel;
-  const correctedY = (y - canvasOffset.y) / zoomLevel;
-
-  processClick(correctedX, correctedY); // Общая функция для обработки клика
+  processClick(x, y); // Вызов общей функции обработки клика
 };
-
-
-
-
 
 const processClick = (x, y) => {
   const clickedMark = boardMarks.find(mark => {
@@ -156,6 +145,7 @@ const processClick = (x, y) => {
     setBoardMarks([...boardMarks, newMark]);
   }
 };
+
 
 const deleteMark = (clickedMark) => {
   const updatedMarks = boardMarks.filter(mark => mark.id !== clickedMark.id);
@@ -236,17 +226,11 @@ const handleTouchStart = (e) => {
 };
 
 const handleTouchMove = (e) => {
-  if (!isDragging) return;
-
-  if (e.touches.length === 1) {
+  if (e.touches.length === 1 && isDragging) {
     const touch = e.touches[0];
     const dx = touch.clientX - dragStart.x;
     const dy = touch.clientY - dragStart.y;
-
-    setCanvasOffset({
-      x: dx,
-      y: dy,
-    });
+    setCanvasOffset({ x: dx, y: dy });
   } else if (e.touches.length === 2) {
     const dist = Math.hypot(
       e.touches[0].clientX - e.touches[1].clientX,
@@ -254,16 +238,16 @@ const handleTouchMove = (e) => {
     );
     if (initialDistance !== null) {
       const scale = dist / initialDistance;
-      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * (1 + (scale - 1) * 0.1))); // Плавный зум
+      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale)); // Плавный зум
       setZoomLevel(newZoom);
     }
+    setInitialDistance(dist); // Обновляем расстояние для следующего шага
   }
 };
 
 const handleTouchEnd = () => {
   setIsDragging(false);
   setInitialDistance(null);
-  setIsClick(true); // Устанавливаем isClick в true после завершения касания
 };
 const handleMouseLeave = () => {
   setIsHovered(false);
@@ -605,28 +589,34 @@ const handleCanvasClick = (e) => {
     };
   }, []);
   useEffect(() => {
-  const canvasContainer = canvasContainerRef.current;
+    const canvasContainer = canvasContainerRef.current;
 
-  // Проверяем, существует ли элемент
-  if (!canvasContainer) return;
+    // Проверяем, существует ли элемент
+    if (!canvasContainer) return;
 
-  // Блокируем стандартное поведение для касаний
-  const preventScroll = (e) => {
-    if (e.cancelable) {
-      e.preventDefault();
-    }
-  };
+    // Блокируем стандартное поведение для касаний
+    const preventScroll = (e) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
 
-  // Регистрируем обработчик с { passive: false }
-  canvasContainer.addEventListener('touchstart', handleMobileClick, { passive: false });
-  canvasContainer.addEventListener('touchmove', preventScroll, { passive: false });
+    // Регистрируем обработчики
+    canvasContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvasContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvasContainer.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvasContainer.addEventListener('touchend', handleMobileClick, { passive: false });
+    canvasContainer.addEventListener('touchmove', preventScroll, { passive: false });
 
-  // Убираем обработчик при размонтировании
-  return () => {
-    canvasContainer.removeEventListener('touchstart', handleMobileClick, { passive: false });
-    canvasContainer.removeEventListener('touchmove', preventScroll, { passive: false });
-  };
-}, []); // Зависимости отсутствуют
+    // Убираем обработчики при размонтировании
+    return () => {
+      canvasContainer.removeEventListener('touchstart', handleTouchStart, { passive: false });
+      canvasContainer.removeEventListener('touchmove', handleTouchMove, { passive: false });
+      canvasContainer.removeEventListener('touchend', handleTouchEnd, { passive: false });
+      canvasContainer.removeEventListener('touchend', handleMobileClick, { passive: false });
+      canvasContainer.removeEventListener('touchmove', preventScroll, { passive: false });
+    };
+}, []);
 
 
 
