@@ -157,9 +157,8 @@ function App() {
     if (!image || isDragging) return;
 
     const canvas = canvasRef.current;
-    const rect = canvasContainerRef.current.getBoundingClientRect();
+    const rect = canvasContainerRef.current.getBoundingClientRect(); // Контейнер, а не canvas
     const touch = e.touches[0] || e.changedTouches[0];
-
     if (!touch) return;
 
     const clientX = touch.clientX - rect.left;
@@ -211,28 +210,28 @@ function App() {
     setIsClick(false);
   };
 
-  const handleWheel = (e) => {
-    if (!image) return;
-    e.preventDefault();
+const handleWheel = (e) => {
+  if (!image) return;
+  e.preventDefault();
 
-    const container = canvasContainerRef.current;
-    const rect = container.getBoundingClientRect();
+  const container = canvasContainerRef.current;
+  const rect = container.getBoundingClientRect();
 
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
 
-    const imgX = (mouseX - canvasOffset.x) / zoomLevel;
-    const imgY = (mouseY - canvasOffset.y) / zoomLevel;
+  const imgX = (mouseX - canvasOffset.x) / zoomLevel;
+  const imgY = (mouseY - canvasOffset.y) / zoomLevel;
 
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.5, Math.min(3, zoomLevel * delta));
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.max(0.5, Math.min(3, zoomLevel * delta));
 
-    const newOffsetX = mouseX - imgX * newZoom;
-    const newOffsetY = mouseY - imgY * newZoom;
+  const newOffsetX = mouseX - imgX * newZoom;
+  const newOffsetY = mouseY - imgY * newZoom;
 
-    setZoomLevel(newZoom);
-    setCanvasOffset({ x: newOffsetX, y: newOffsetY });
-  };
+  setZoomLevel(newZoom);
+  setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+};
 
   const handleTouchStart = (e) => {
     if (e.touches.length === 1) {
@@ -253,39 +252,64 @@ function App() {
     if (e.cancelable) e.preventDefault();
   };
 
-  const handleTouchMove = (e) => {
-    if (e.touches.length === 1 && isDragging) {
-      const touch = e.touches[0];
-      const dx = touch.clientX - dragStart.x;
-      const dy = touch.clientY - dragStart.y;
-      setCanvasOffset({ x: dx, y: dy });
-      setIsClick(false);
-    } else if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
+const handleTouchMove = (e) => {
+  if (e.cancelable) e.preventDefault();
 
-      if (initialDistance !== null) {
-        const scale = dist / initialDistance;
-        const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
-        setZoomLevel(newZoom);
-      }
+  if (e.touches.length === 1 && isDragging) {
+    const touch = e.touches[0];
+    const dx = touch.clientX - dragStart.x;
+    const dy = touch.clientY - dragStart.y;
+    setCanvasOffset({ x: dx, y: dy });
+  } else if (e.touches.length === 2) {
+    e.preventDefault(); // Важно!
 
-      setInitialDistance(dist);
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+
+    const currentDistance = Math.hypot(
+      touch1.clientX - touch2.clientX,
+      touch1.clientY - touch2.clientY
+    );
+
+    if (initialDistance !== null) {
+      const scale = currentDistance / initialDistance;
+      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
+      
+      // Центр зума — между двумя пальцами
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+      const containerRect = canvasContainerRef.current.getBoundingClientRect();
+      const imgX = (centerX - containerRect.left) * (canvas.width / containerRect.width);
+      const imgY = (centerY - containerRect.top) * (canvas.height / containerRect.height);
+
+      // Корректируем смещение так, чтобы зум происходил от точки между пальцами
+      const dx = imgX * (1 - scale);
+      const dy = imgY * (1 - scale);
+
+      setCanvasOffset({
+        x: canvasOffset.x + dx,
+        y: canvasOffset.y + dy
+      });
+
+      setZoomLevel(newZoom);
     }
 
-    if (e.cancelable) e.preventDefault();
-  };
+    setInitialDistance(currentDistance);
+  }
+};
 
   const handleTouchEnd = (e) => {
-    setIsDragging(false);
-    setInitialDistance(null);
+  setIsDragging(false);
+  setInitialDistance(null);
 
-    if (e.touches.length === 0 && !isDragging) {
+  // Если это был именно тап — вызываем клик
+  if (e.touches.length === 0 && !isDragging) {
+    setTimeout(() => {
       handleMobileClick(e);
-    }
-  };
+    }, 50); // Небольшая задержка для уверенности, что это не часть скролла
+  }
+};
 
   const resetZoomAndPan = () => {
     setZoomLevel(1);
@@ -465,6 +489,18 @@ function App() {
       container.removeEventListener('touchmove', preventScroll);
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+
+useEffect(() => {
+  const onTouchCancel = () => {
+    setIsDragging(false);
+  };
+
+  window.addEventListener('touchcancel', onTouchCancel);
+  return () => {
+    window.removeEventListener('touchcancel', onTouchCancel);
+  };
+}, []);
+
   return (
 <Container className="my-4">
   <h1 className="text-center mb-4">Учет досок на фотографии</h1>
