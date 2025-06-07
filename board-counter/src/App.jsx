@@ -158,39 +158,24 @@ const handleMobileClick = (e) => {
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
 
-  const clientX = touch.clientX - rect.left;
-  const clientY = touch.clientY - rect.top;
+  // Ограничиваем координаты касания границами canvas
+  const clientX = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+  const clientY = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
   
-  const scaleX = imgRef.current.width / rect.width;
-  const scaleY = imgRef.current.height / rect.height;
-  const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
-  const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-  alert(
-    `Координаты касания:\n` +
-    `clientX: ${clientX}\n` +
-    `clientY: ${clientY}\n\n` +
+  // Нормализованные координаты (0-1) в пределах canvas
+  const normalizedX = clientX / rect.width;
+  const normalizedY = clientY / rect.height;
 
-    `Размеры изображения и контейнера:\n` +
-    `img.width: ${imgRef.current.width}, img.height: ${imgRef.current.height}\n` +
-    `rect.width: ${rect.width}, rect.height: ${rect.height}\n\n` +
-
-    `Масштабирование:\n` +
-    `scaleX: ${scaleX.toFixed(2)}, scaleY: ${scaleY.toFixed(2)}\n` +
-    `zoomLevel: ${zoomLevel.toFixed(2)}\n\n` +
-
-    `Смещение:\n` +
-    `canvasOffset.x: ${canvasOffset.x}, canvasOffset.y: ${canvasOffset.y}\n\n` +
-
-    `Финальные координаты на изображении:\n` +
-    `imageX: ${imageX.toFixed(2)}\n` +
-    `imageY: ${imageY.toFixed(2)}\n\n`
-  );
+  // Координаты на изображении с учетом трансформаций
+  const imageX = (normalizedX * canvas.width - canvasOffset.x) / zoomLevel;
+  const imageY = (normalizedY * canvas.height - canvasOffset.y) / zoomLevel;
+  
   // Проверяем, попали ли мы в изображение
   if (
     imageX >= 0 &&
     imageY >= 0 &&
-    imageX <= imgRef.current.width &&
-    imageY <= imgRef.current.height
+    imageX <= canvas.width / zoomLevel &&
+    imageY <= canvas.height / zoomLevel
   ) {
     processClick(imageX, imageY);
   }
