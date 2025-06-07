@@ -149,15 +149,6 @@ const handleDesktopClick = (e) => {
   processClick(imageX, imageY);
 };
 
-function isPointOnImage(x, y, img, offset, zoom) {
-  const imageLeft = 0; // потому что изображение рисуется от (0, 0)
-  const imageTop = 0;
-  const imageRight = img.width;
-  const imageBottom = img.height;
-
-  return x >= imageLeft && x <= imageRight && y >= imageTop && y <= imageBottom;
-}
-
 const handleMobileClick = (e) => {
   if (!image || isDragging || !selectedLog) return;
 
@@ -183,6 +174,7 @@ const handleMobileClick = (e) => {
     imageX <= imgRef.current.width &&
     imageY <= imgRef.current.height
   ) {
+    alert("Тач сработал!");
     processClick(imageX, imageY);
   }
 };
@@ -334,7 +326,6 @@ const handleTouchEnd = (e) => {
     const touchDuration = now - touchStartTime.current;
 
     if (touchDuration < 150) {
-      alert("Тач сработал!");
       handleMobileClick(e);
     }
   }
