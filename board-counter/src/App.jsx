@@ -166,7 +166,11 @@ const handleMobileClick = (e) => {
 
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-
+  alert(
+    `Не попал в изображение:\n` +
+    `imageX: ${imageX.toFixed(2)}, imageY: ${imageY.toFixed(2)}\n` +
+    `drawnWidth: ${drawnWidth}, drawnHeight: ${drawnHeight}`
+  );
   // Проверяем, попали ли мы в изображение
   if (
   imageX >= 0 &&
