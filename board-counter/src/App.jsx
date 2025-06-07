@@ -151,25 +151,25 @@ const handleDesktopClick = (e) => {
 
 const handleMobileClick = (e) => {
   if (!image || isDragging || !selectedLog) return;
-
   const touch = e.touches?.[0] || e.changedTouches?.[0];
   if (!touch) return;
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
-  
-  // Получаем координаты касания относительно viewport
-  const clientX = touch.clientX - rect.left;
-  const clientY = touch.clientY - rect.top;
 
-  // Преобразуем в координаты canvas с учетом devicePixelRatio
-  const canvasX = clientX * window.devicePixelRatio;
-  const canvasY = clientY * window.devicePixelRatio;
+  // Получаем координаты касания относительно canvas с учетом viewport
+  const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
+  const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
 
-  // Учитываем смещение и масштаб
-  const imageX = (canvasX - canvasOffset.x) / zoomLevel;
-  const imageY = (canvasY - canvasOffset.y) / zoomLevel;
+  // Масштаб canvas относительно его отображаемого размера
+  const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
+  const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
 
+  // Координаты с учетом масштаба и смещения
+  const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
+  const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
+
+  // Проверяем, что координаты находятся внутри изображения
   if (
     imageX >= 0 &&
     imageY >= 0 &&
@@ -278,7 +278,6 @@ const handleTouchStart = (e) => {
 
 const handleTouchMove = (e) => {
   if (e.cancelable) e.preventDefault();
-
   if (e.touches.length === 1 && isDragging) {
     const touch = e.touches[0];
     const dx = touch.clientX - dragStart.x;
@@ -291,21 +290,16 @@ const handleTouchMove = (e) => {
       touch1.clientX - touch2.clientX,
       touch1.clientY - touch2.clientY
     );
-
     if (initialDistance !== null) {
       const scale = currentDistance / initialDistance;
       const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
-
       const centerX = (touch1.clientX + touch2.clientX) / 2;
       const centerY = (touch1.clientY + touch2.clientY) / 2;
       const containerRect = canvasContainerRef.current.getBoundingClientRect();
-      
       const imgX = (centerX - containerRect.left - canvasOffset.x) / zoomLevel;
       const imgY = (centerY - containerRect.top - canvasOffset.y) / zoomLevel;
-
       const newOffsetX = centerX - containerRect.left - imgX * newZoom;
       const newOffsetY = centerY - containerRect.top - imgY * newZoom;
-
       setZoomLevel(newZoom);
       setCanvasOffset({ x: newOffsetX, y: newOffsetY });
     }
@@ -366,41 +360,33 @@ const handleTouchEnd = (e) => {
   };
 
   // Canvas rendering
- useEffect(() => {
+useEffect(() => {
   if (!image) return;
   const canvas = canvasRef.current;
   const ctx = canvas.getContext('2d');
   const img = new Image();
-  
   img.onload = () => {
     imgRef.current = img;
-    
     // Устанавливаем физические размеры canvas
     const container = canvasContainerRef.current;
     const rect = container.getBoundingClientRect();
     canvas.width = rect.width * window.devicePixelRatio;
     canvas.height = rect.height * window.devicePixelRatio;
-
     // Устанавливаем CSS размеры для отображения
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     // Применяем трансформации
     ctx.save();
     ctx.translate(canvasOffset.x, canvasOffset.y);
     ctx.scale(zoomLevel, zoomLevel);
-
     // Рисуем изображение
     ctx.drawImage(img, 0, 0, img.width, img.height);
-
     // Рисуем маркеры
     boardMarks.forEach((mark) => {
       const log = logs.find((l) => l.id === mark.logId);
       if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number);
     });
-
     ctx.restore();
   };
   img.src = image;

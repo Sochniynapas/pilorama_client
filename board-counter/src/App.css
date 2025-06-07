@@ -20,12 +20,6 @@ canvas {
   image-rendering: -webkit-optimize-contrast; /* Опционально */
 }
 
-@media (max-width: 768px) {
-  canvas {
-    zoom: 1.5; /* Увеличение масштаба маркеров */
-  }
-}
-
 /* Стили для цветового пикера */
 .react-colorful {
   width: 100% !important;
