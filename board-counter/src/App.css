@@ -6,15 +6,9 @@ body {
 
 .canvas-container {
   width: 100%;
-  height: 80vh;
-  overflow: scroll; /* ВАЖНО: вместо hidden */
-  position: relative;
-  border: 1px solid #ccc;
-  background: #f8f9fa;
-  overflow: hidden !important;
+  height: 100%;
+  display: block;
   touch-action: none;
-  -webkit-user-select: none; /* Предотвращаем выделение текста на iOS */
-  user-select: none;
 }
 
 canvas {

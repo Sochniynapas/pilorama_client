@@ -157,29 +157,18 @@ const handleMobileClick = (e) => {
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
+  
+  // Получаем координаты касания относительно viewport
+  const clientX = touch.clientX - rect.left;
+  const clientY = touch.clientY - rect.top;
 
-  // Получаем координаты касания относительно canvas с учетом viewport
-  const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
-  const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
+  // Преобразуем в координаты canvas с учетом devicePixelRatio
+  const canvasX = clientX * window.devicePixelRatio;
+  const canvasY = clientY * window.devicePixelRatio;
 
-  // Масштаб canvas относительно его отображаемого размера
-  const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
-  const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
-
-  // Координаты с учетом масштаба и смещения
-  const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
-  const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-
-  alert(
-    `Координаты касания:\n` +
-    `clientX: ${clientX}\n` +
-    `clientY: ${clientY}\n\n` +
-    `Размеры canvas: ${canvas.width}x${canvas.height}\n` +
-    `Размеры rect: ${rect.width}x${rect.height}\n` +
-    `Device pixel ratio: ${window.devicePixelRatio}\n` +
-    `Масштабы: scaleX=${scaleX}, scaleY=${scaleY}\n` +
-    `Финальные координаты: imageX=${imageX}, imageY=${imageY}`
-  );
+  // Учитываем смещение и масштаб
+  const imageX = (canvasX - canvasOffset.x) / zoomLevel;
+  const imageY = (canvasY - canvasOffset.y) / zoomLevel;
 
   if (
     imageX >= 0 &&
@@ -386,25 +375,25 @@ const handleTouchEnd = (e) => {
   img.onload = () => {
     imgRef.current = img;
     
-    // Корректировка размеров canvas под устройство
+    // Устанавливаем физические размеры canvas
     const container = canvasContainerRef.current;
     const rect = container.getBoundingClientRect();
-    const displayWidth = Math.floor(rect.width * window.devicePixelRatio);
-    const displayHeight = Math.floor(rect.height * window.devicePixelRatio);
-    
-    // Устанавливаем размеры canvas соответствующие физическим пикселям
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+
+    // Устанавливаем CSS размеры для отображения
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Применяем трансформации (перемещение и зум)
+    // Применяем трансформации
     ctx.save();
     ctx.translate(canvasOffset.x, canvasOffset.y);
     ctx.scale(zoomLevel, zoomLevel);
 
-    // РИСУЕМ ИЗОБРАЖЕНИЕ С ПРОПОРЦИОНАЛЬНЫМ МАСШТАБИРОВАНИЕМ
-    ctx.drawImage(img, 0, 0); 
+    // Рисуем изображение
+    ctx.drawImage(img, 0, 0, img.width, img.height);
 
     // Рисуем маркеры
     boardMarks.forEach((mark) => {
