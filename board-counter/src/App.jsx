@@ -166,7 +166,8 @@ const handleMobileClick = (e) => {
 
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-  
+  alert(`Клик: X=${clientX}, Y=${clientY}, ширина canvas=${rect.width}, высота canvas=${rect.height}`);
+
   if (
     clientX >= 0 &&
     clientY >= 0 &&
