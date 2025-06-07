@@ -171,8 +171,8 @@ const handleMobileClick = (e) => {
   const imageY = (normalizedY * canvas.height - canvasOffset.y) / zoomLevel;
   alert(
     `Координаты касания:\n` +
-    `clientX: ${clientX}\n` +
-    `clientY: ${clientY}\n\n` +
+    `clientX: ${rect.width}\n` +
+    `clientY: ${rect.height}\n\n` +
 
     `Размеры изображения и контейнера:\n` +
     `touch.clientX: ${touch.clientX}, rect.left: ${rect.left}\n` +
