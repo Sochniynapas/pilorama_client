@@ -158,17 +158,25 @@ function isPointOnImage(x, y, img, offset, zoom) {
 
 const handleMobileClick = (e) => {
   if (!image || isDragging) return;
+
   const canvas = canvasRef.current;
   const container = canvasContainerRef.current;
   if (!canvas || !container) return;
+
+  // Используйте changedTouches для touchend
   const touch = e.touches[0] || e.changedTouches[0];
+  if (!touch) return;
+
   const rect = canvas.getBoundingClientRect();
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
+
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
+
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
+
   processClick(imageX, imageY);
 };
 
@@ -220,7 +228,7 @@ const handleMouseMove = (e) => {
 
 const handleWheel = (e) => {
   if (!image) return;
-  e.preventDefault();
+  if (e.cancelable) e.preventDefault();
 
   const container = canvasContainerRef.current;
   const rect = container.getBoundingClientRect();
@@ -495,26 +503,28 @@ const handleTouchMove = (e) => {
   };
 
   // Touch events
-  useEffect(() => {
-    const container = canvasContainerRef.current;
-    if (!container) return;
+useEffect(() => {
+  const container = canvasContainerRef.current;
+  if (!container) return;
 
-    const preventScroll = (e) => {
-      if (e.cancelable) e.preventDefault();
-    };
+  const preventScroll = (e) => {
+    if (e.cancelable) e.preventDefault();
+  };
 
-    container.addEventListener('touchstart', handleTouchStart);
-    container.addEventListener('touchmove', handleTouchMove);
-    container.addEventListener('touchend', handleTouchEnd);
-    container.addEventListener('touchmove', preventScroll);
+  container.addEventListener('wheel', handleWheel, { passive: false }); // ✅
+  container.addEventListener('touchmove', preventScroll, { passive: false }); // ✅
+  container.addEventListener('touchstart', handleTouchStart);
+  container.addEventListener('touchmove', handleTouchMove, { passive: false });
+  container.addEventListener('touchend', handleTouchEnd);
 
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchmove', preventScroll);
-    };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+  return () => {
+    container.removeEventListener('wheel', handleWheel, { passive: false });
+    container.removeEventListener('touchmove', preventScroll, { passive: false });
+    container.removeEventListener('touchstart', handleTouchStart);
+    container.removeEventListener('touchmove', handleTouchMove, { passive: false });
+    container.removeEventListener('touchend', handleTouchEnd);
+  };
+}, [handleWheel, handleTouchMove, handleTouchEnd]);
 
 useEffect(() => {
   const onTouchCancel = () => {
