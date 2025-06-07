@@ -175,8 +175,8 @@ const handleMobileClick = (e) => {
     `clientY: ${clientY}\n\n` +
 
     `Размеры изображения и контейнера:\n` +
-    `img.width: ${imgRef.current.width}, img.height: ${imgRef.current.height}\n` +
-    `rect.width: ${rect.width}, rect.height: ${rect.height}\n\n` +
+    `touch.clientX: ${touch.clientX}, rect.left: ${rect.left}\n` +
+    `touch.clientY: ${touch.clientY}, rect.top: ${rect.top}\n\n` +
 
     `Масштабирование:\n` +
     `zoomLevel: ${zoomLevel.toFixed(2)}\n\n` +
