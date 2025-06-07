@@ -183,7 +183,6 @@ const handleMobileClick = (e) => {
     imageX <= imgRef.current.width &&
     imageY <= imgRef.current.height
   ) {
-    console.log("Нажали");
     processClick(imageX, imageY);
   }
 };
@@ -236,7 +235,7 @@ const handleMouseMove = (e) => {
 
 const handleWheel = (e) => {
   if (!image) return;
-  if (e.cancelable) e.preventDefault();
+  
 
   const container = canvasContainerRef.current;
   const rect = container.getBoundingClientRect();
@@ -258,6 +257,7 @@ const handleWheel = (e) => {
 };
 
 const handleTouchStart = (e) => {
+  if (e.cancelable) e.preventDefault();
   touchStartTime.current = Date.now();
   
   if (e.touches.length === 1) {
@@ -279,7 +279,6 @@ const handleTouchStart = (e) => {
     setPinchCenter({ x: centerX, y: centerY });
   }
   
-  if (e.cancelable) e.preventDefault();
 };
 
 
@@ -321,6 +320,8 @@ const handleTouchMove = (e) => {
 };
 
 const handleTouchEnd = (e) => {
+  alert("Тач сработал!");
+  if (e.cancelable) e.preventDefault();
   if (isDragging) {
     setIsDragging(false);
     setInitialDistance(null);
@@ -507,21 +508,15 @@ useEffect(() => {
   if (!container) return;
 
   const options = { passive: false };
-  
-  const preventScroll = (e) => {
-    if (e.cancelable && (isDragging || initialDistance !== null)) {
-      e.preventDefault();
-    }
-  };
 
   container.addEventListener('wheel', handleWheel, options);
-  container.addEventListener('touchmove', preventScroll, options);
+  container.addEventListener('touchmove', handleTouchMove, options);
   container.addEventListener('touchstart', handleTouchStart, options);
-  container.addEventListener('touchend', handleTouchEnd);
+  container.addEventListener('touchend', handleTouchEnd, options);
 
   return () => {
     container.removeEventListener('wheel', handleWheel);
-    container.removeEventListener('touchmove', preventScroll);
+    container.removeEventListener('touchmove', handleTouchMove);
     container.removeEventListener('touchstart', handleTouchStart);
     container.removeEventListener('touchend', handleTouchEnd);
   };
@@ -743,12 +738,15 @@ useEffect(() => {
             >
               <canvas
                 ref={canvasRef}
+                width={image?.width}
+                height={image?.height}
                 onClick={!isMobile ? handleDesktopClick : null}
+                onTouchStart={isMobile ? handleTouchStart : null}
                 onTouchEnd={isMobile ? handleTouchEnd : null}
                 style={{
-                  transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
-                  transformOrigin: '0 0',
-                  willChange: 'transform'
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: 'top left',
+                  display: 'block',
                 }}
               />
             </div>
