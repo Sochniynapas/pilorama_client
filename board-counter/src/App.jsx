@@ -156,22 +156,31 @@ const handleMobileClick = (e) => {
   if (!touch) return;
 
   const canvas = canvasRef.current;
-  const container = canvasContainerRef.current; // Используем контейнер
-  const rect = container.getBoundingClientRect();
+  const rect = canvas.getBoundingClientRect();
 
-  // Координаты касания относительно контейнера
-  const clientX = touch.clientX - rect.left;
-  const clientY = touch.clientY - rect.top;
+  // Получаем координаты касания относительно canvas с учетом viewport
+  const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
+  const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
 
-  // Масштабируем координаты
-  const scaleX = imgRef.current.width / rect.width;
-  const scaleY = imgRef.current.height / rect.height;
+  // Масштаб canvas относительно его отображаемого размера
+  const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
+  const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
 
-  // Финальные координаты на изображении
-  const imageX = ((clientX * scaleX - canvasOffset.x) / zoomLevel);
-  const imageY = ((clientY * scaleY - canvasOffset.y) / zoomLevel);
+  // Координаты с учетом масштаба и смещения
+  const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
+  const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
 
-  // Проверяем попадание
+  alert(
+    `Координаты касания:\n` +
+    `clientX: ${clientX}\n` +
+    `clientY: ${clientY}\n\n` +
+    `Размеры canvas: ${canvas.width}x${canvas.height}\n` +
+    `Размеры rect: ${rect.width}x${rect.height}\n` +
+    `Device pixel ratio: ${window.devicePixelRatio}\n` +
+    `Масштабы: scaleX=${scaleX}, scaleY=${scaleY}\n` +
+    `Финальные координаты: imageX=${imageX}, imageY=${imageY}`
+  );
+
   if (
     imageX >= 0 &&
     imageY >= 0 &&
@@ -181,6 +190,7 @@ const handleMobileClick = (e) => {
     processClick(imageX, imageY);
   }
 };
+
 
 
   const handleMouseEnter = () => {
@@ -367,15 +377,24 @@ const handleTouchEnd = (e) => {
   };
 
   // Canvas rendering
-  useEffect(() => {
+ useEffect(() => {
   if (!image) return;
   const canvas = canvasRef.current;
   const ctx = canvas.getContext('2d');
   const img = new Image();
+  
   img.onload = () => {
     imgRef.current = img;
-    canvas.width = img.width;
-    canvas.height = img.height;
+    
+    // Корректировка размеров canvas под устройство
+    const container = canvasContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    const displayWidth = Math.floor(rect.width * window.devicePixelRatio);
+    const displayHeight = Math.floor(rect.height * window.devicePixelRatio);
+    
+    // Устанавливаем размеры canvas соответствующие физическим пикселям
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -739,9 +758,8 @@ useEffect(() => {
                 onTouchStart={isMobile ? handleTouchStart : null}
                 onTouchEnd={isMobile ? handleTouchEnd : null}
                 style={{
-                  transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
-                  transformOrigin: '0 0',
-                  willChange: 'transform'
+                  transformOrigin: 'top left',
+                  display: 'block',
                 }}
               />
             </div>
