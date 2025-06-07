@@ -160,28 +160,29 @@ function isPointOnImage(x, y, img, offset, zoom) {
 
 const handleMobileClick = (e) => {
   if (!image || isDragging || !selectedLog) return;
-  
-  // Используем changedTouches для touchend
+
   const touch = e.touches?.[0] || e.changedTouches?.[0];
   if (!touch) return;
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
-  
-  // Получаем координаты касания относительно canvas
+
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
 
-  // Масштабируем координаты с учетом размеров canvas
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
 
-  // Учитываем зум и смещение
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
 
-  // Проверяем, что точка внутри изображения
-  if (imageX >= 0 && imageY >= 0 && imageX <= imgRef.current.width && imageY <= imgRef.current.height) {
+  // Проверяем, попали ли мы в изображение
+  if (
+    imageX >= 0 &&
+    imageY >= 0 &&
+    imageX <= imgRef.current.width &&
+    imageY <= imgRef.current.height
+  ) {
     processClick(imageX, imageY);
   }
 };
@@ -330,7 +331,7 @@ const handleTouchEnd = (e) => {
     const now = Date.now();
     const touchDuration = now - touchStartTime.current;
 
-    if (touchDuration < 100) {
+    if (touchDuration < 150) {
       handleMobileClick(e);
     }
   }
@@ -387,16 +388,7 @@ const handleTouchEnd = (e) => {
     ctx.scale(zoomLevel, zoomLevel);
 
     // РИСУЕМ ИЗОБРАЖЕНИЕ С ПРОПОРЦИОНАЛЬНЫМ МАСШТАБИРОВАНИЕМ
-    ctx.drawImage(img, 0, 0, img.width, img.height); // <-- стандартное поведение
-
-    // ИЛИ, если нужно растянуть на весь canvas (без сохранения пропорций):
-    // ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    // Либо масштабировать с сохранением пропорций и заполнить canvas:
-    const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
-    const x = (canvas.width - img.width * scale) / 2;
-    const y = (canvas.height - img.height * scale) / 2;
-    ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+    ctx.drawImage(img, 0, 0); 
 
     // Рисуем маркеры
     boardMarks.forEach((mark) => {
@@ -739,7 +731,6 @@ useEffect(() => {
                 display: 'inline-block', // ВАЖНО: подстраивается под размер canvas
                 maxWidth: '100%',
                 cursor: isDragging ? 'grabbing' : selectedLog ? 'crosshair' : 'grab',
-                touchAction: 'pan-x pan-y pinch-zoom'
               }}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
@@ -748,7 +739,6 @@ useEffect(() => {
               onMouseUp={handleMouseUp}
               onWheel={handleWheel}
               onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
             >
               <canvas
                 ref={canvasRef}
