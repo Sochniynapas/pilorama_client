@@ -160,13 +160,31 @@ const handleMobileClick = (e) => {
 
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
-  alert(canvas.width + " " + imgRef.current.width)
   
   const scaleX = imgRef.current.width / rect.width;
   const scaleY = imgRef.current.height / rect.height;
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
+  alert(
+    `Координаты касания:\n` +
+    `clientX: ${clientX}\n` +
+    `clientY: ${clientY}\n\n` +
 
+    `Размеры изображения и контейнера:\n` +
+    `img.width: ${imgRef.current.width}, img.height: ${imgRef.current.height}\n` +
+    `rect.width: ${rect.width}, rect.height: ${rect.height}\n\n` +
+
+    `Масштабирование:\n` +
+    `scaleX: ${scaleX.toFixed(2)}, scaleY: ${scaleY.toFixed(2)}\n` +
+    `zoomLevel: ${zoomLevel.toFixed(2)}\n\n` +
+
+    `Смещение:\n` +
+    `canvasOffset.x: ${canvasOffset.x}, canvasOffset.y: ${canvasOffset.y}\n\n` +
+
+    `Финальные координаты на изображении:\n` +
+    `imageX: ${imageX.toFixed(2)}\n` +
+    `imageY: ${imageY.toFixed(2)}\n\n`
+  );
   // Проверяем, попали ли мы в изображение
   if (
     imageX >= 0 &&
@@ -735,7 +753,6 @@ useEffect(() => {
                 onTouchStart={isMobile ? handleTouchStart : null}
                 onTouchEnd={isMobile ? handleTouchEnd : null}
                 style={{
-                  transform: `scale(${zoomLevel})`,
                   transformOrigin: 'top left',
                   display: 'block',
                 }}
