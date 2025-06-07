@@ -159,18 +159,24 @@ const handleMobileClick = (e) => {
   const canvas = canvasRef.current;
   const container = canvasContainerRef.current;
   const touch = e.touches[0] || e.changedTouches[0];
-  if (!touch || !container) return;
+  if (!touch || !container || !canvas) return;
 
-  // Получаем размеры контейнера и позицию касания
+  // Получаем размеры контейнера и координаты касания
   const rect = container.getBoundingClientRect();
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
 
-  // Переводим координаты касания в логические координаты изображения:
-  // 1. Учитываем масштабирование: clientX / zoomLevel
-  // 2. Учитываем смещение: - canvasOffset.x / zoomLevel
-  const x = (clientX - canvasOffset.x) / zoomLevel;
-  const y = (clientY - canvasOffset.y) / zoomLevel;
+  // Коэффициенты масштабирования между canvas и экраном
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  // Переводим экранные координаты в координаты canvas до применения трансформаций
+  const rawX = clientX * scaleX;
+  const rawY = clientY * scaleY;
+
+  // Учитываем текущее смещение и масштаб
+  const x = (rawX - canvasOffset.x) / zoomLevel;
+  const y = (rawY - canvasOffset.y) / zoomLevel;
 
   processClick(x, y);
 };
