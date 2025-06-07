@@ -156,44 +156,22 @@ const handleMobileClick = (e) => {
   if (!touch) return;
 
   const canvas = canvasRef.current;
-  const rect = canvas.getBoundingClientRect();
+  const container = canvasContainerRef.current; // Используем контейнер
+  const rect = container.getBoundingClientRect();
 
+  // Координаты касания относительно контейнера
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
-  
+
+  // Масштабируем координаты
   const scaleX = imgRef.current.width / rect.width;
   const scaleY = imgRef.current.height / rect.height;
-  const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
-  const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-  alert(
-    `Координаты касания:\n` +
-    `clientX: ${clientX}\n` +
-    `clientY: ${clientY}\n\n` +
 
-    `Координаты касания:\n` +
-    `touch.clientX: ${touch.clientX}\n` +
-    `touch.clientY: ${touch.clientY}\n\n` +
+  // Финальные координаты на изображении
+  const imageX = ((clientX * scaleX - canvasOffset.x) / zoomLevel);
+  const imageY = ((clientY * scaleY - canvasOffset.y) / zoomLevel);
 
-    `Координаты касания:\n` +
-    `rect.left: ${rect.left}\n` +
-    `rect.top: ${rect.top}\n\n` +
-
-    `Размеры изображения и контейнера:\n` +
-    `img.width: ${imgRef.current.width}, img.height: ${imgRef.current.height}\n` +
-    `rect.width: ${rect.width}, rect.height: ${rect.height}\n\n` +
-
-    `Масштабирование:\n` +
-    `scaleX: ${scaleX.toFixed(2)}, scaleY: ${scaleY.toFixed(2)}\n` +
-    `zoomLevel: ${zoomLevel.toFixed(2)}\n\n` +
-
-    `Смещение:\n` +
-    `canvasOffset.x: ${canvasOffset.x}, canvasOffset.y: ${canvasOffset.y}\n\n` +
-
-    `Финальные координаты на изображении:\n` +
-    `imageX: ${imageX.toFixed(2)}\n` +
-    `imageY: ${imageY.toFixed(2)}\n\n`
-  );
-  // Проверяем, попали ли мы в изображение
+  // Проверяем попадание
   if (
     imageX >= 0 &&
     imageY >= 0 &&
@@ -761,8 +739,9 @@ useEffect(() => {
                 onTouchStart={isMobile ? handleTouchStart : null}
                 onTouchEnd={isMobile ? handleTouchEnd : null}
                 style={{
-                  transformOrigin: 'top left',
-                  display: 'block',
+                  transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
+                  transformOrigin: '0 0',
+                  willChange: 'transform'
                 }}
               />
             </div>
