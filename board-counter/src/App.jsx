@@ -171,8 +171,8 @@ const handleMobileClick = (e) => {
   if (
     imageX >= 0 &&
     imageY >= 0 &&
-    imageX <= imgRef.current.width &&
-    imageY <= imgRef.current.height
+    imageX <= imgRef.current.naturalWidth &&
+    imageY <= imgRef.current.naturalHeight
   ) {
     processClick(imageX, imageY);
   }
