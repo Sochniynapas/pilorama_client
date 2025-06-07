@@ -166,16 +166,22 @@ const handleMobileClick = (e) => {
 
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-  alert(`Клик: X=${clientX}, Y=${clientY}, ширина canvas=${rect.width}, высота canvas=${rect.height}`);
 
+  // Проверяем, попали ли мы в изображение
   if (
-    clientX >= 0 &&
-    clientY >= 0 &&
-    clientX <= rect.width &&
-    clientY <= rect.height
-  ) {
-    processClick(imageX, imageY);
-  }
+  imageX >= 0 &&
+  imageY >= 0 &&
+  imageX <= drawnWidth &&
+  imageY <= drawnHeight
+) {
+  processClick(imageX, imageY);
+} else {
+  alert(
+    `Не попал в изображение:\n` +
+    `imageX: ${imageX.toFixed(2)}, imageY: ${imageY.toFixed(2)}\n` +
+    `drawnWidth: ${drawnWidth}, drawnHeight: ${drawnHeight}`
+  );
+}
 };
 
 
