@@ -150,7 +150,7 @@ const handleDesktopClick = (e) => {
 };
 
 const handleMobileClick = (e) => {
-   if (!image || isDragging || !selectedLog) return;
+  if (!image || isDragging || !selectedLog) return;
 
   const touch = e.touches?.[0] || e.changedTouches?.[0];
   if (!touch) return;
@@ -158,27 +158,32 @@ const handleMobileClick = (e) => {
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
 
-  // Ограничиваем координаты касания границами canvas
-  const clientX = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
-  const clientY = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
+  const clientX = touch.clientX - rect.left;
+  const clientY = touch.clientY - rect.top;
   
-  // Нормализованные координаты (0-1) в пределах canvas
-  const normalizedX = clientX / rect.width;
-  const normalizedY = clientY / rect.height;
-
-  // Координаты на изображении с учетом трансформаций
-  const imageX = (normalizedX * canvas.width - canvasOffset.x) / zoomLevel;
-  const imageY = (normalizedY * canvas.height - canvasOffset.y) / zoomLevel;
+  const scaleX = imgRef.current.width / rect.width;
+  const scaleY = imgRef.current.height / rect.height;
+  const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
+  const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
   alert(
     `Координаты касания:\n` +
-    `clientX: ${rect.width}\n` +
-    `clientY: ${rect.height}\n\n` +
+    `clientX: ${clientX}\n` +
+    `clientY: ${clientY}\n\n` +
+
+    `Координаты касания:\n` +
+    `touch.clientX: ${touch.clientX}\n` +
+    `touch.clientY: ${touch.clientY}\n\n` +
+
+    `Координаты касания:\n` +
+    `rect.left: ${rect.left}\n` +
+    `rect.top: ${rect.top}\n\n` +
 
     `Размеры изображения и контейнера:\n` +
-    `touch.clientX: ${touch.clientX}, rect.left: ${rect.left}\n` +
-    `touch.clientY: ${touch.clientY}, rect.top: ${rect.top}\n\n` +
+    `img.width: ${imgRef.current.width}, img.height: ${imgRef.current.height}\n` +
+    `rect.width: ${rect.width}, rect.height: ${rect.height}\n\n` +
 
     `Масштабирование:\n` +
+    `scaleX: ${scaleX.toFixed(2)}, scaleY: ${scaleY.toFixed(2)}\n` +
     `zoomLevel: ${zoomLevel.toFixed(2)}\n\n` +
 
     `Смещение:\n` +
@@ -192,8 +197,8 @@ const handleMobileClick = (e) => {
   if (
     imageX >= 0 &&
     imageY >= 0 &&
-    imageX <= canvas.width / zoomLevel &&
-    imageY <= canvas.height / zoomLevel
+    imageX <= imgRef.current.width &&
+    imageY <= imgRef.current.height
   ) {
     processClick(imageX, imageY);
   }
