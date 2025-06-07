@@ -183,6 +183,7 @@ const handleMobileClick = (e) => {
     imageX <= imgRef.current.width &&
     imageY <= imgRef.current.height
   ) {
+    console.log("Нажали");
     processClick(imageX, imageY);
   }
 };
