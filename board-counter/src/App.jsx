@@ -166,7 +166,7 @@ const handleMobileClick = (e) => {
 
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
-  alert("Тач сработал! " + imageX + imageX+" "+imageY+" "+imgRef.current.naturalWidth+" "+imgRef.current.naturalHeight);
+  alert("Тач сработал! " +imageX+" "+imageY+" "+imgRef.current.naturalWidth+" "+imgRef.current.naturalHeight);
   // Проверяем, попали ли мы в изображение
   if (
     imageX >= 0 &&
