@@ -36,6 +36,8 @@ function App() {
   const [isClick, setIsClick] = useState(true);
   const [initialDistance, setInitialDistance] = useState(null);
   const [logicalOffset, setLogicalOffset] = useState({ x: 0, y: 0 });
+  const [pinchCenter, setPinchCenter] = useState({ x: 0, y: 0 });
+
   // Refs
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -43,7 +45,7 @@ function App() {
   const colorPreviewRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const clickTimerRef = useRef(null);
-  
+  const touchStartTime = useRef(0);
   // Derived values
   const dynamicMarkerSize = markerSize * zoomLevel * (isMobile ? 2 : 1);
 
@@ -253,24 +255,30 @@ const handleWheel = (e) => {
   setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 };
 
-  const handleTouchStart = (e) => {
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      setIsDragging(true);
-      setDragStart({
-        x: touch.clientX - canvasOffset.x,
-        y: touch.clientY - canvasOffset.y
-      });
-    } else if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      setInitialDistance(dist);
-    }
-
-    if (e.cancelable) e.preventDefault();
-  };
+const handleTouchStart = (e) => {
+  touchStartTime.current = Date.now();
+  
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({
+      x: touch.clientX - canvasOffset.x,
+      y: touch.clientY - canvasOffset.y
+    });
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    setInitialDistance(dist);
+    
+    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    setPinchCenter({ x: centerX, y: centerY });
+  }
+  
+  if (e.cancelable) e.preventDefault();
+};
 
 
 const handleTouchMove = (e) => {
@@ -280,18 +288,10 @@ const handleTouchMove = (e) => {
     const touch = e.touches[0];
     const dx = touch.clientX - dragStart.x;
     const dy = touch.clientY - dragStart.y;
-
-    const logicalX = dx / zoomLevel;
-    const logicalY = dy / zoomLevel;
-
-    setLogicalOffset({ x: logicalX, y: logicalY });
     setCanvasOffset({ x: dx, y: dy });
   } else if (e.touches.length === 2) {
-    e.preventDefault(); // Важно!
-
     const touch1 = e.touches[0];
     const touch2 = e.touches[1];
-
     const currentDistance = Math.hypot(
       touch1.clientX - touch2.clientX,
       touch1.clientY - touch2.clientY
@@ -300,41 +300,43 @@ const handleTouchMove = (e) => {
     if (initialDistance !== null) {
       const scale = currentDistance / initialDistance;
       const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
-      
-      // Центр зума — между двумя пальцами
+
       const centerX = (touch1.clientX + touch2.clientX) / 2;
       const centerY = (touch1.clientY + touch2.clientY) / 2;
-
       const containerRect = canvasContainerRef.current.getBoundingClientRect();
-      const imgX = (centerX - containerRect.left) * (canvas.width / containerRect.width);
-      const imgY = (centerY - containerRect.top) * (canvas.height / containerRect.height);
+      
+      const imgX = (centerX - containerRect.left - canvasOffset.x) / zoomLevel;
+      const imgY = (centerY - containerRect.top - canvasOffset.y) / zoomLevel;
 
-      // Корректируем смещение так, чтобы зум происходил от точки между пальцами
-      const dx = imgX * (1 - scale);
-      const dy = imgY * (1 - scale);
-
-      setCanvasOffset({
-        x: canvasOffset.x + dx,
-        y: canvasOffset.y + dy
-      });
+      const newOffsetX = centerX - containerRect.left - imgX * newZoom;
+      const newOffsetY = centerY - containerRect.top - imgY * newZoom;
 
       setZoomLevel(newZoom);
+      setCanvasOffset({ x: newOffsetX, y: newOffsetY });
     }
-
     setInitialDistance(currentDistance);
   }
 };
 
-  const handleTouchEnd = (e) => {
+const handleTouchEnd = (e) => {
+  if (isDragging) {
+    setIsDragging(false);
+    setInitialDistance(null);
+    return;
+  }
+
+  if (e.touches.length === 0 && e.changedTouches?.length === 1) {
+    const touch = e.changedTouches[0];
+    const now = Date.now();
+    const touchDuration = now - touchStartTime.current;
+
+    if (touchDuration < 100) {
+      handleMobileClick(e);
+    }
+  }
+
   setIsDragging(false);
   setInitialDistance(null);
-
-  // Если это был именно тап — вызываем клик
-  if (e.touches.length === 0 && !isDragging) {
-    setTimeout(() => {
-      handleMobileClick(e);
-    }, 50); // Небольшая задержка для уверенности, что это не часть скролла
-  }
 };
 
   const resetZoomAndPan = () => {
@@ -511,24 +513,26 @@ useEffect(() => {
   const container = canvasContainerRef.current;
   if (!container) return;
 
+  const options = { passive: false };
+  
   const preventScroll = (e) => {
-    if (e.cancelable) e.preventDefault();
+    if (e.cancelable && (isDragging || initialDistance !== null)) {
+      e.preventDefault();
+    }
   };
 
-  container.addEventListener('wheel', handleWheel, { passive: false }); // ✅
-  container.addEventListener('touchmove', preventScroll, { passive: false }); // ✅
-  container.addEventListener('touchstart', handleTouchStart);
-  container.addEventListener('touchmove', handleTouchMove, { passive: false });
+  container.addEventListener('wheel', handleWheel, options);
+  container.addEventListener('touchmove', preventScroll, options);
+  container.addEventListener('touchstart', handleTouchStart, options);
   container.addEventListener('touchend', handleTouchEnd);
 
   return () => {
-    container.removeEventListener('wheel', handleWheel, { passive: false });
-    container.removeEventListener('touchmove', preventScroll, { passive: false });
+    container.removeEventListener('wheel', handleWheel);
+    container.removeEventListener('touchmove', preventScroll);
     container.removeEventListener('touchstart', handleTouchStart);
-    container.removeEventListener('touchmove', handleTouchMove, { passive: false });
     container.removeEventListener('touchend', handleTouchEnd);
   };
-}, [handleWheel, handleTouchMove, handleTouchEnd]);
+}, [handleWheel, isDragging, initialDistance]);
 
 useEffect(() => {
   const onTouchCancel = () => {
