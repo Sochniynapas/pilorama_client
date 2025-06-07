@@ -157,27 +157,31 @@ function isPointOnImage(x, y, img, offset, zoom) {
 }
 
 const handleMobileClick = (e) => {
-  if (!image || isDragging) return;
-
-  const canvas = canvasRef.current;
-  const container = canvasContainerRef.current;
-  if (!canvas || !container) return;
-
-  // Используйте changedTouches для touchend
-  const touch = e.touches[0] || e.changedTouches[0];
+  if (!image || isDragging || !selectedLog) return;
+  
+  // Используем changedTouches для touchend
+  const touch = e.touches?.[0] || e.changedTouches?.[0];
   if (!touch) return;
 
+  const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
+  
+  // Получаем координаты касания относительно canvas
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
 
+  // Масштабируем координаты с учетом размеров canvas
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
 
+  // Учитываем зум и смещение
   const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
   const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
 
-  processClick(imageX, imageY);
+  // Проверяем, что точка внутри изображения
+  if (imageX >= 0 && imageY >= 0 && imageX <= imgRef.current.width && imageY <= imgRef.current.height) {
+    processClick(imageX, imageY);
+  }
 };
 
 
@@ -731,7 +735,7 @@ useEffect(() => {
                 display: 'inline-block', // ВАЖНО: подстраивается под размер canvas
                 maxWidth: '100%',
                 cursor: isDragging ? 'grabbing' : selectedLog ? 'crosshair' : 'grab',
-                touchAction: 'none'
+                touchAction: 'pan-x pan-y pinch-zoom'
               }}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
