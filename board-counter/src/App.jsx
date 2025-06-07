@@ -320,7 +320,7 @@ const handleTouchMove = (e) => {
 };
 
 const handleTouchEnd = (e) => {
-  alert("Тач сработал!");
+  
   if (e.cancelable) e.preventDefault();
   if (isDragging) {
     setIsDragging(false);
@@ -334,6 +334,7 @@ const handleTouchEnd = (e) => {
     const touchDuration = now - touchStartTime.current;
 
     if (touchDuration < 150) {
+      alert("Тач сработал!");
       handleMobileClick(e);
     }
   }
