@@ -35,7 +35,7 @@ function App() {
   const [documentNumber, setDocumentNumber] = useState('');
   const [isClick, setIsClick] = useState(true);
   const [initialDistance, setInitialDistance] = useState(null);
-
+  const [logicalOffset, setLogicalOffset] = useState({ x: 0, y: 0 });
   // Refs
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -43,7 +43,7 @@ function App() {
   const colorPreviewRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const clickTimerRef = useRef(null);
-
+  
   // Derived values
   const dynamicMarkerSize = markerSize * zoomLevel * (isMobile ? 2 : 1);
 
@@ -76,110 +76,103 @@ function App() {
     }
   };
 
-  const processClick = (x, y) => {
-    const clickedMark = boardMarks.find((mark) => {
-      const distance = Math.sqrt((mark.x - x) ** 2 + (mark.y - y) ** 2);
-      return distance <= dynamicMarkerSize;
-    });
-
-    if (clickedMark) {
-      deleteMark(clickedMark);
-      return;
+const deleteMark = (clickedMark) => {
+  const updatedMarks = boardMarks.filter((mark) => mark.id !== clickedMark.id);
+  const marksForLog = updatedMarks
+    .filter((mark) => mark.logId === clickedMark.logId)
+    .sort((a, b) => a.number - b.number);
+  const renumberedMarks = updatedMarks.map((mark) => {
+    if (mark.logId === clickedMark.logId) {
+      const newNumber = marksForLog.findIndex((m) => m.id === mark.id) + 1;
+      return { ...mark, number: newNumber };
     }
+    return mark;
+  });
+  const maxNumber = renumberedMarks
+    .filter((mark) => mark.logId === clickedMark.logId)
+    .reduce((max, mark) => Math.max(max, mark.number), 0);
+  setLogs(
+    logs.map((log) =>
+      log.id === clickedMark.logId ? { ...log, nextMarkId: maxNumber + 1 } : log
+    )
+  );
+  setBoardMarks(renumberedMarks);
+};
+  const processClick = (imageX, imageY) => {
+  if (imageX < 0 || imageY < 0 || imageX > imgRef.current.width || imageY > imgRef.current.height) {
+    return;
+  }
 
-    if (selectedLog) {
-      const nextNumber = logs.find((log) => log.id === selectedLog.id).nextMarkId;
-      const newMark = {
-        id: Date.now(),
-        x,
-        y,
-        logId: selectedLog.id,
-        color: selectedLog.color,
-        number: nextNumber,
-        size: dynamicMarkerSize
-      };
+  const clickedMark = boardMarks.find((mark) => {
+    const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
+    return distance <= dynamicMarkerSize;
+  });
 
-      setLogs(
-        logs.map((log) =>
-          log.id === selectedLog.id ? { ...log, nextMarkId: nextNumber + 1 } : log
-        )
-      );
-      setBoardMarks([...boardMarks, newMark]);
-    }
-  };
+  if (clickedMark) {
+    deleteMark(clickedMark);
+    return;
+  }
 
-  const deleteMark = (clickedMark) => {
-    const updatedMarks = boardMarks.filter((mark) => mark.id !== clickedMark.id);
-    const marksForLog = updatedMarks
-      .filter((mark) => mark.logId === clickedMark.logId)
-      .sort((a, b) => a.number - b.number);
-
-    const renumberedMarks = updatedMarks.map((mark) => {
-      if (mark.logId === clickedMark.logId) {
-        const newNumber = marksForLog.findIndex((m) => m.id === mark.id) + 1;
-        return { ...mark, number: newNumber };
-      }
-      return mark;
-    });
-
-    const maxNumber = renumberedMarks
-      .filter((mark) => mark.logId === clickedMark.logId)
-      .reduce((max, mark) => Math.max(max, mark.number), 0);
+  if (selectedLog) {
+    const nextNumber = logs.find((log) => log.id === selectedLog.id).nextMarkId;
+    const newMark = {
+      id: Date.now(),
+      x: imageX,
+      y: imageY,
+      logId: selectedLog.id,
+      color: selectedLog.color,
+      number: nextNumber,
+      size: dynamicMarkerSize
+    };
 
     setLogs(
       logs.map((log) =>
-        log.id === clickedMark.logId ? { ...log, nextMarkId: maxNumber + 1 } : log
+        log.id === selectedLog.id ? { ...log, nextMarkId: nextNumber + 1 } : log
       )
     );
+    setBoardMarks([...boardMarks, newMark]);
+  }
+};
 
-    setBoardMarks(renumberedMarks);
-  };
+const handleDesktopClick = (e) => {
+  if (!image || !isClick || isDragging) return;
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.clientX - rect.left;
+  const clientY = e.clientY - rect.top;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
+  const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
+  processClick(imageX, imageY);
+};
 
-  const handleDesktopClick = (e) => {
-    if (!image || !isClick || isDragging) return;
+function isPointOnImage(x, y, img, offset, zoom) {
+  const imageLeft = 0; // потому что изображение рисуется от (0, 0)
+  const imageTop = 0;
+  const imageRight = img.width;
+  const imageBottom = img.height;
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
-
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
-    const x = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
-    const y = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
-
-    processClick(x, y);
-  };
+  return x >= imageLeft && x <= imageRight && y >= imageTop && y <= imageBottom;
+}
 
 const handleMobileClick = (e) => {
   if (!image || isDragging) return;
-
   const canvas = canvasRef.current;
   const container = canvasContainerRef.current;
+  if (!canvas || !container) return;
   const touch = e.touches[0] || e.changedTouches[0];
-  if (!touch || !container || !canvas) return;
-
-  // Получаем размеры контейнера и координаты касания
-  const rect = container.getBoundingClientRect();
+  const rect = canvas.getBoundingClientRect();
   const clientX = touch.clientX - rect.left;
   const clientY = touch.clientY - rect.top;
-
-  // Коэффициенты масштабирования между canvas и экраном
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-
-  // Переводим экранные координаты в координаты canvas до применения трансформаций
-  const rawX = clientX * scaleX;
-  const rawY = clientY * scaleY;
-
-  // Учитываем текущее смещение и масштаб
-  const x = (rawX - canvasOffset.x) / zoomLevel;
-  const y = (rawY - canvasOffset.y) / zoomLevel;
-
-  processClick(x, y);
+  const imageX = (clientX * scaleX - canvasOffset.x) / zoomLevel;
+  const imageY = (clientY * scaleY - canvasOffset.y) / zoomLevel;
+  processClick(imageX, imageY);
 };
+
+
   const handleMouseEnter = () => {
     document.body.style.overflow = 'hidden';
   };
@@ -210,13 +203,20 @@ const handleMobileClick = (e) => {
     }
   };
 
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - dragStart.x;
-    const dy = e.clientY - dragStart.y;
-    setCanvasOffset({ x: dx, y: dy });
-    setIsClick(false);
-  };
+const handleMouseMove = (e) => {
+  if (!isDragging) return;
+
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+
+  // Переводим физическое смещение в логическое
+  const logicalX = dx / zoomLevel;
+  const logicalY = dy / zoomLevel;
+
+  setLogicalOffset({ x: logicalX, y: logicalY });
+  setCanvasOffset({ x: dx, y: dy });
+  setIsClick(false);
+};
 
 const handleWheel = (e) => {
   if (!image) return;
@@ -260,6 +260,7 @@ const handleWheel = (e) => {
     if (e.cancelable) e.preventDefault();
   };
 
+
 const handleTouchMove = (e) => {
   if (e.cancelable) e.preventDefault();
 
@@ -267,6 +268,11 @@ const handleTouchMove = (e) => {
     const touch = e.touches[0];
     const dx = touch.clientX - dragStart.x;
     const dy = touch.clientY - dragStart.y;
+
+    const logicalX = dx / zoomLevel;
+    const logicalY = dy / zoomLevel;
+
+    setLogicalOffset({ x: logicalX, y: logicalY });
     setCanvasOffset({ x: dx, y: dy });
   } else if (e.touches.length === 2) {
     e.preventDefault(); // Важно!
@@ -350,32 +356,44 @@ const handleTouchMove = (e) => {
 
   // Canvas rendering
   useEffect(() => {
-    if (!image) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.save();
-      ctx.translate(canvasOffset.x, canvasOffset.y);
-      ctx.scale(zoomLevel, zoomLevel);
-      ctx.drawImage(img, 0, 0);
-
-      boardMarks.forEach((mark) => {
-        const log = logs.find((l) => l.id === mark.logId);
-        if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number);
-      });
-
-      ctx.restore();
-    };
-
-    img.src = image;
+  if (!image) return;
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = () => {
     imgRef.current = img;
-  }, [image, boardMarks, logs, markerSize, zoomLevel, canvasOffset]);
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Применяем трансформации (перемещение и зум)
+    ctx.save();
+    ctx.translate(canvasOffset.x, canvasOffset.y);
+    ctx.scale(zoomLevel, zoomLevel);
+
+    // РИСУЕМ ИЗОБРАЖЕНИЕ С ПРОПОРЦИОНАЛЬНЫМ МАСШТАБИРОВАНИЕМ
+    ctx.drawImage(img, 0, 0, img.width, img.height); // <-- стандартное поведение
+
+    // ИЛИ, если нужно растянуть на весь canvas (без сохранения пропорций):
+    // ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Либо масштабировать с сохранением пропорций и заполнить canvas:
+    const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+    const x = (canvas.width - img.width * scale) / 2;
+    const y = (canvas.height - img.height * scale) / 2;
+    ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+    // Рисуем маркеры
+    boardMarks.forEach((mark) => {
+      const log = logs.find((l) => l.id === mark.logId);
+      if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number);
+    });
+
+    ctx.restore();
+  };
+  img.src = image;
+}, [image, boardMarks, logs, zoomLevel, canvasOffset]);
 
   const drawMark = (ctx, x, y, color, number) => {
     ctx.beginPath();
@@ -700,7 +718,8 @@ useEffect(() => {
               style={{ 
                 overflow: 'hidden',
                 border: '1px solid #ddd',
-                height: '500px',
+                display: 'inline-block', // ВАЖНО: подстраивается под размер canvas
+                maxWidth: '100%',
                 cursor: isDragging ? 'grabbing' : selectedLog ? 'crosshair' : 'grab',
                 touchAction: 'none'
               }}
@@ -720,6 +739,7 @@ useEffect(() => {
                 style={{
                   transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
                   transformOrigin: '0 0',
+                  willChange: 'transform'
                 }}
               />
             </div>
