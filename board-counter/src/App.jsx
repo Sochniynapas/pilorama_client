@@ -14,8 +14,8 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 function App() {
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent
+  const [isMobile, setIsMobile] = useState(
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   );
 
   // States
@@ -37,7 +37,10 @@ function App() {
   const [initialDistance, setInitialDistance] = useState(null);
   const [logicalOffset, setLogicalOffset] = useState({ x: 0, y: 0 });
   const [pinchCenter, setPinchCenter] = useState({ x: 0, y: 0 });
-
+  const [clickStartTime, setClickStartTime] = useState(0);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [dragSpeed, setDragSpeed] = useState(1.5);
+  
   // Refs
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -46,8 +49,9 @@ function App() {
   const canvasContainerRef = useRef(null);
   const clickTimerRef = useRef(null);
   const touchStartTime = useRef(0);
+  
   // Derived values
-  const dynamicMarkerSize = markerSize * zoomLevel * (isMobile ? 2 : 1);
+  const dynamicMarkerSize = markerSize * (isMobile ? 1.1 : 1);
 
   // Standard colors
   const standardColors = [
@@ -63,272 +67,293 @@ function App() {
     '#000000'
   ];
 
+  // Check mobile on resize
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        window.innerWidth < 768
+      );
+    };
+
+    window.addEventListener('resize', checkIfMobile);
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, []);
+
   // Handlers
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setImage(event.target.result);
-        setBoardMarks([]);
-        setZoomLevel(1);
-        setCanvasOffset({ x: 0, y: 0 });
+        const img = new Image();
+        img.onload = () => {
+          setImageSize({
+            width: img.width,
+            height: img.height
+          });
+          setImage(event.target.result);
+          setBoardMarks([]);
+          setZoomLevel(1);
+          setCanvasOffset({ x: 0, y: 0 });
+        };
+        img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     }
   };
 
-const deleteMark = (clickedMark) => {
-  const updatedMarks = boardMarks.filter((mark) => mark.id !== clickedMark.id);
-  const marksForLog = updatedMarks
-    .filter((mark) => mark.logId === clickedMark.logId)
-    .sort((a, b) => a.number - b.number);
-  const renumberedMarks = updatedMarks.map((mark) => {
-    if (mark.logId === clickedMark.logId) {
-      const newNumber = marksForLog.findIndex((m) => m.id === mark.id) + 1;
-      return { ...mark, number: newNumber };
-    }
-    return mark;
-  });
-  const maxNumber = renumberedMarks
-    .filter((mark) => mark.logId === clickedMark.logId)
-    .reduce((max, mark) => Math.max(max, mark.number), 0);
-  setLogs(
-    logs.map((log) =>
-      log.id === clickedMark.logId ? { ...log, nextMarkId: maxNumber + 1 } : log
-    )
-  );
-  setBoardMarks(renumberedMarks);
-};
-  const processClick = (imageX, imageY) => {
-  if (imageX < 0 || imageY < 0 || imageX > imgRef.current.width || imageY > imgRef.current.height) {
-    return;
-  }
-
-  const clickedMark = boardMarks.find((mark) => {
-    const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
-    return distance <= dynamicMarkerSize;
-  });
-
-  if (clickedMark) {
-    deleteMark(clickedMark);
-    return;
-  }
-
-  if (selectedLog) {
-    const nextNumber = logs.find((log) => log.id === selectedLog.id).nextMarkId;
-    const newMark = {
-      id: Date.now(),
-      x: imageX,
-      y: imageY,
-      logId: selectedLog.id,
-      color: selectedLog.color,
-      number: nextNumber,
-      size: dynamicMarkerSize
-    };
-
+  const deleteMark = (clickedMark) => {
+    const updatedMarks = boardMarks.filter((mark) => mark.id !== clickedMark.id);
+    const marksForLog = updatedMarks
+      .filter((mark) => mark.logId === clickedMark.logId)
+      .sort((a, b) => a.number - b.number);
+    const renumberedMarks = updatedMarks.map((mark) => {
+      if (mark.logId === clickedMark.logId) {
+        const newNumber = marksForLog.findIndex((m) => m.id === mark.id) + 1;
+        return { ...mark, number: newNumber };
+      }
+      return mark;
+    });
+    const maxNumber = renumberedMarks
+      .filter((mark) => mark.logId === clickedMark.logId)
+      .reduce((max, mark) => Math.max(max, mark.number), 0);
     setLogs(
       logs.map((log) =>
-        log.id === selectedLog.id ? { ...log, nextMarkId: nextNumber + 1 } : log
+        log.id === clickedMark.logId ? { ...log, nextMarkId: maxNumber + 1 } : log
       )
     );
-    setBoardMarks([...boardMarks, newMark]);
-  }
-};
+    setBoardMarks(renumberedMarks);
+  };
 
-const handleDesktopClick = (e) => {
-  if (!image || !isClick || isDragging) return;
-  const canvas = canvasRef.current;
-  const rect = canvas.getBoundingClientRect();
-  const clientX = e.clientX - rect.left;
-  const clientY = e.clientY - rect.top;
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
-  const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
-  processClick(imageX, imageY);
-};
+  const processClick = (imageX, imageY) => {
+    if (imageX < 0 || imageY < 0 || imageX > imgRef.current.width || imageY > imgRef.current.height) {
+      return;
+    }
 
-const handleMobileClick = (e) => {
-  if (!image || isDragging || !selectedLog) return;
-  const touch = e.touches?.[0] || e.changedTouches?.[0];
-  if (!touch) return;
+    const clickedMark = boardMarks.find((mark) => {
+      const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
+      return distance <= dynamicMarkerSize;
+    });
 
-  const canvas = canvasRef.current;
-  const rect = canvas.getBoundingClientRect();
+    if (clickedMark) {
+      deleteMark(clickedMark);
+      return;
+    }
 
-  // Получаем координаты касания относительно canvas с учетом viewport
-  const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
-  const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
+    if (selectedLog) {
+      const nextNumber = logs.find((log) => log.id === selectedLog.id).nextMarkId;
+      const newMark = {
+        id: Date.now(),
+        x: imageX,
+        y: imageY,
+        logId: selectedLog.id,
+        color: selectedLog.color,
+        number: nextNumber,
+        size: dynamicMarkerSize
+      };
 
-  // Масштаб canvas относительно его отображаемого размера
-  const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
-  const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
+      setLogs(
+        logs.map((log) =>
+          log.id === selectedLog.id ? { ...log, nextMarkId: nextNumber + 1 } : log
+        )
+      );
+      setBoardMarks([...boardMarks, newMark]);
+    }
+  };
 
-  // Координаты с учетом масштаба и смещения
-  const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
-  const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
-
-  // Проверяем, что координаты находятся внутри изображения
-  if (
-    imageX >= 0 &&
-    imageY >= 0 &&
-    imageX <= imgRef.current.width &&
-    imageY <= imgRef.current.height
-  ) {
+  const handleDesktopClick = (e) => {
+    if (!image || !isClick || isDragging) return;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
+    const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
     processClick(imageX, imageY);
-  }
-};
+  };
 
+  const handleMobileClick = (e) => {
+    if (!image || isDragging || !selectedLog) return;
+    const touch = e.touches?.[0] || e.changedTouches?.[0];
+    if (!touch) return;
 
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+
+    const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
+    const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
+
+    const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
+    const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
+
+    const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
+    const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
+
+    if (
+      imageX >= 0 &&
+      imageY >= 0 &&
+      imageX <= imgRef.current.width &&
+      imageY <= imgRef.current.height
+    ) {
+      processClick(imageX, imageY);
+    }
+  };
 
   const handleMouseEnter = () => {
     document.body.style.overflow = 'hidden';
   };
 
   const handleMouseLeave = () => {
+    if (isDragging) setIsDragging(false);
     document.body.style.overflow = '';
   };
+
   const handleMouseDown = (e) => {
     if (e.button === 0) {
-      clickTimerRef.current = setTimeout(() => {
-        setIsClick(false);
-        setIsDragging(true);
-        setDragStart({
-          x: e.clientX - canvasOffset.x,
-          y: e.clientY - canvasOffset.y
-        });
-      }, 150);
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX,
+        y: e.clientY,
+        offsetX: canvasOffset.x,
+        offsetY: canvasOffset.y
+      });
+      setClickStartTime(Date.now());
     }
   };
 
   const handleMouseUp = () => {
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    const clickDuration = Date.now() - clickStartTime;
+    
     if (isDragging) {
       setIsDragging(false);
-      setIsClick(false);
-    } else {
-      setIsClick(true);
+      
+      if (clickDuration < 150) {
+        setIsClick(true);
+      } else {
+        setIsClick(false);
+      }
     }
   };
 
-const handleMouseMove = (e) => {
-  if (!isDragging) return;
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
 
-  const dx = e.clientX - dragStart.x;
-  const dy = e.clientY - dragStart.y;
+    const dx = (e.clientX - dragStart.x) * dragSpeed;
+    const dy = (e.clientY - dragStart.y) * dragSpeed;
 
-  // Переводим физическое смещение в логическое
-  const logicalX = dx / zoomLevel;
-  const logicalY = dy / zoomLevel;
-
-  setLogicalOffset({ x: logicalX, y: logicalY });
-  setCanvasOffset({ x: dx, y: dy });
-  setIsClick(false);
-};
-
-const handleWheel = (e) => {
-  if (!image) return;
-  
-
-  const container = canvasContainerRef.current;
-  const rect = container.getBoundingClientRect();
-
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-
-  const imgX = (mouseX - canvasOffset.x) / zoomLevel;
-  const imgY = (mouseY - canvasOffset.y) / zoomLevel;
-
-  const delta = e.deltaY > 0 ? 0.9 : 1.1;
-  const newZoom = Math.max(0.5, Math.min(3, zoomLevel * delta));
-
-  const newOffsetX = mouseX - imgX * newZoom;
-  const newOffsetY = mouseY - imgY * newZoom;
-
-  setZoomLevel(newZoom);
-  setCanvasOffset({ x: newOffsetX, y: newOffsetY });
-};
-
-const handleTouchStart = (e) => {
-  if (e.cancelable) e.preventDefault();
-  touchStartTime.current = Date.now();
-  
-  if (e.touches.length === 1) {
-    const touch = e.touches[0];
-    setIsDragging(true);
-    setDragStart({
-      x: touch.clientX - canvasOffset.x,
-      y: touch.clientY - canvasOffset.y
+    setCanvasOffset({
+      x: dragStart.offsetX + dx,
+      y: dragStart.offsetY + dy
     });
-  } else if (e.touches.length === 2) {
-    const dist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
-    setInitialDistance(dist);
+    setIsClick(false);
+  };
+
+  const handleWheel = (e) => {
+    if (!image) return;
     
-    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    setPinchCenter({ x: centerX, y: centerY });
-  }
-  
-};
+    const container = canvasContainerRef.current;
+    const rect = container.getBoundingClientRect();
 
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-const handleTouchMove = (e) => {
-  if (e.cancelable) e.preventDefault();
-  if (e.touches.length === 1 && isDragging) {
-    const touch = e.touches[0];
-    const dx = touch.clientX - dragStart.x;
-    const dy = touch.clientY - dragStart.y;
-    setCanvasOffset({ x: dx, y: dy });
-  } else if (e.touches.length === 2) {
-    const touch1 = e.touches[0];
-    const touch2 = e.touches[1];
-    const currentDistance = Math.hypot(
-      touch1.clientX - touch2.clientX,
-      touch1.clientY - touch2.clientY
-    );
-    if (initialDistance !== null) {
-      const scale = currentDistance / initialDistance;
-      const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
-      const centerX = (touch1.clientX + touch2.clientX) / 2;
-      const centerY = (touch1.clientY + touch2.clientY) / 2;
-      const containerRect = canvasContainerRef.current.getBoundingClientRect();
-      const imgX = (centerX - containerRect.left - canvasOffset.x) / zoomLevel;
-      const imgY = (centerY - containerRect.top - canvasOffset.y) / zoomLevel;
-      const newOffsetX = centerX - containerRect.left - imgX * newZoom;
-      const newOffsetY = centerY - containerRect.top - imgY * newZoom;
-      setZoomLevel(newZoom);
-      setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+    const imgX = (mouseX - canvasOffset.x) / zoomLevel;
+    const imgY = (mouseY - canvasOffset.y) / zoomLevel;
+
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.5, Math.min(3, zoomLevel * delta));
+
+    const newOffsetX = mouseX - imgX * newZoom;
+    const newOffsetY = mouseY - imgY * newZoom;
+
+    setZoomLevel(newZoom);
+    setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.cancelable) e.preventDefault();
+    touchStartTime.current = Date.now();
+    
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      setIsDragging(true);
+      setDragStart({
+        x: touch.clientX,
+        y: touch.clientY,
+        offsetX: canvasOffset.x,
+        offsetY: canvasOffset.y
+      });
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      setInitialDistance(dist);
+      
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      setPinchCenter({ x: centerX, y: centerY });
     }
-    setInitialDistance(currentDistance);
-  }
-};
+  };
 
-const handleTouchEnd = (e) => {
-  
-  if (e.cancelable) e.preventDefault();
-  if (isDragging) {
+  const handleTouchMove = (e) => {
+    if (e.cancelable) e.preventDefault();
+    if (e.touches.length === 1 && isDragging) {
+      const touch = e.touches[0];
+      const dx = (touch.clientX - dragStart.x) * dragSpeed;
+      const dy = (touch.clientY - dragStart.y) * dragSpeed;
+      setCanvasOffset({
+        x: dragStart.offsetX + dx,
+        y: dragStart.offsetY + dy
+      });
+    } else if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const currentDistance = Math.hypot(
+        touch1.clientX - touch2.clientX,
+        touch1.clientY - touch2.clientY
+      );
+      if (initialDistance !== null) {
+        const scale = currentDistance / initialDistance;
+        const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+        const containerRect = canvasContainerRef.current.getBoundingClientRect();
+        const imgX = (centerX - containerRect.left - canvasOffset.x) / zoomLevel;
+        const imgY = (centerY - containerRect.top - canvasOffset.y) / zoomLevel;
+        const newOffsetX = centerX - containerRect.left - imgX * newZoom;
+        const newOffsetY = centerY - containerRect.top - imgY * newZoom;
+        setZoomLevel(newZoom);
+        setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+      }
+      setInitialDistance(currentDistance);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (e.cancelable) e.preventDefault();
+    if (isDragging) {
+      setIsDragging(false);
+      setInitialDistance(null);
+      return;
+    }
+
+    if (e.touches.length === 0 && e.changedTouches?.length === 1) {
+      const touch = e.changedTouches[0];
+      const now = Date.now();
+      const touchDuration = now - touchStartTime.current;
+
+      if (touchDuration < 150) {
+        handleMobileClick(e);
+      }
+    }
+
     setIsDragging(false);
     setInitialDistance(null);
-    return;
-  }
-
-  if (e.touches.length === 0 && e.changedTouches?.length === 1) {
-    const touch = e.changedTouches[0];
-    const now = Date.now();
-    const touchDuration = now - touchStartTime.current;
-
-    if (touchDuration < 150) {
-      handleMobileClick(e);
-    }
-  }
-
-  setIsDragging(false);
-  setInitialDistance(null);
-};
+  };
 
   const resetZoomAndPan = () => {
     setZoomLevel(1);
@@ -360,48 +385,62 @@ const handleTouchEnd = (e) => {
   };
 
   // Canvas rendering
-useEffect(() => {
-  if (!image) return;
-  const canvas = canvasRef.current;
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  img.onload = () => {
-    imgRef.current = img;
-    // Устанавливаем физические размеры canvas
-    const container = canvasContainerRef.current;
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width * window.devicePixelRatio;
-    canvas.height = rect.height * window.devicePixelRatio;
-    // Устанавливаем CSS размеры для отображения
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Применяем трансформации
-    ctx.save();
-    ctx.translate(canvasOffset.x, canvasOffset.y);
-    ctx.scale(zoomLevel, zoomLevel);
-    // Рисуем изображение
-    ctx.drawImage(img, 0, 0, img.width, img.height);
-    // Рисуем маркеры
-    boardMarks.forEach((mark) => {
-      const log = logs.find((l) => l.id === mark.logId);
-      if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number);
-    });
-    ctx.restore();
-  };
-  img.src = image;
-}, [image, boardMarks, logs, zoomLevel, canvasOffset]);
+  useEffect(() => {
+    if (!image) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      imgRef.current = img;
+      
+      const container = canvasContainerRef.current;
+      const maxWidth = container.parentElement.clientWidth;
+      const maxHeight = window.innerHeight * (isMobile ? 0.6 : 0.7);
+      
+      let displayWidth = img.width;
+      let displayHeight = img.height;
+      
+      if (img.width > maxWidth || img.height > maxHeight) {
+        const ratio = Math.min(
+          maxWidth / img.width,
+          maxHeight / img.height
+        );
+        displayWidth = img.width * ratio;
+        displayHeight = img.height * ratio;
+      }
+      
+      container.style.width = `${displayWidth}px`;
+      container.style.height = `${displayHeight}px`;
+      
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(canvasOffset.x, canvasOffset.y);
+      ctx.scale(zoomLevel, zoomLevel);
+      ctx.drawImage(img, 0, 0, img.width, img.height);
+      
+      boardMarks.forEach((mark) => {
+        const log = logs.find((l) => l.id === mark.logId);
+        if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number);
+      });
+      ctx.restore();
+    };
+    img.src = image;
+  }, [image, boardMarks, logs, zoomLevel, canvasOffset, markerSize, isMobile]);
 
   const drawMark = (ctx, x, y, color, number) => {
+    const markSizeInPixels = dynamicMarkerSize * window.devicePixelRatio;
     ctx.beginPath();
-    ctx.arc(x, y, dynamicMarkerSize, 0, 2 * Math.PI);
+    ctx.arc(x, y, markSizeInPixels, 0, 2 * Math.PI);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * window.devicePixelRatio;
     ctx.stroke();
     ctx.fillStyle = '#fff';
-    ctx.font = `bold ${dynamicMarkerSize * 0.8}px Arial`;
+    ctx.font = `bold ${markSizeInPixels * 0.8}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(number.toString(), x, y);
@@ -492,42 +531,39 @@ useEffect(() => {
   };
 
   // Touch events
-useEffect(() => {
-  const container = canvasContainerRef.current;
-  if (!container) return;
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
 
-  const options = { passive: false };
+    const options = { passive: false };
 
-  container.addEventListener('wheel', handleWheel, options);
-  container.addEventListener('touchmove', handleTouchMove, options);
-  container.addEventListener('touchstart', handleTouchStart, options);
-  container.addEventListener('touchend', handleTouchEnd, options);
+    container.addEventListener('wheel', handleWheel, options);
+    container.addEventListener('touchmove', handleTouchMove, options);
+    container.addEventListener('touchstart', handleTouchStart, options);
+    container.addEventListener('touchend', handleTouchEnd, options);
 
-  return () => {
-    container.removeEventListener('wheel', handleWheel);
-    container.removeEventListener('touchmove', handleTouchMove);
-    container.removeEventListener('touchstart', handleTouchStart);
-    container.removeEventListener('touchend', handleTouchEnd);
-  };
-}, [handleWheel, isDragging, initialDistance]);
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [handleWheel, isDragging, initialDistance]);
 
-useEffect(() => {
-  const onTouchCancel = () => {
-    setIsDragging(false);
-  };
+  useEffect(() => {
+    const onTouchCancel = () => {
+      setIsDragging(false);
+    };
 
-  window.addEventListener('touchcancel', onTouchCancel);
-  return () => {
-    window.removeEventListener('touchcancel', onTouchCancel);
-  };
-}, []);
+    window.addEventListener('touchcancel', onTouchCancel);
+    return () => {
+      window.removeEventListener('touchcancel', onTouchCancel);
+    };
+  }, []);
 
-  return (
-<Container className="my-4">
-  <h1 className="text-center mb-4">Учет досок на фотографии</h1>
-  <Row className="mb-4">
-    <Col md={6}>
-      {/* Левая колонка с формами */}
+  // Render sections
+  const renderFormsSection = () => (
+    <>
       <Form.Group controlId="formImage" className="mb-3">
         <Form.Label>Загрузите фотографию с досками</Form.Label>
         <Form.Control 
@@ -625,6 +661,17 @@ useEffect(() => {
             onChange={(e) => setMarkerSize(parseInt(e.target.value))}
           />
         </Form.Group>
+
+        <Form.Group controlId="formDragSpeed" className="mb-3">
+          <Form.Label>Скорость перетаскивания: {dragSpeed.toFixed(1)}x</Form.Label>
+          <Form.Range 
+            min="0.5" 
+            max="3" 
+            step="0.1"
+            value={dragSpeed} 
+            onChange={(e) => setDragSpeed(parseFloat(e.target.value))}
+          />
+        </Form.Group>
       </div>
 
       <div className="border p-3 mb-3">
@@ -701,9 +748,11 @@ useEffect(() => {
           Экспорт в Excel
         </Button>
       </div>
-    </Col>
+    </>
+  );
 
-    <Col md={6}>
+  const renderImageSection = () => (
+    <>
       {image ? (
         <>
           <div className="position-relative">
@@ -711,11 +760,13 @@ useEffect(() => {
               ref={canvasContainerRef}
               className='canvas-container'
               style={{ 
-                overflow: 'hidden',
                 border: '1px solid #ddd',
-                display: 'inline-block', // ВАЖНО: подстраивается под размер canvas
-                maxWidth: '100%',
                 cursor: isDragging ? 'grabbing' : selectedLog ? 'crosshair' : 'grab',
+                margin: '0 auto',
+                maxWidth: '100%',
+                overflow: 'hidden',
+                position: 'relative',
+                height: isMobile ? '60vh' : 'auto'
               }}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
@@ -733,8 +784,10 @@ useEffect(() => {
                 onTouchStart={isMobile ? handleTouchStart : null}
                 onTouchEnd={isMobile ? handleTouchEnd : null}
                 style={{
-                  transformOrigin: 'top left',
                   display: 'block',
+                  width: '100%',
+                  height: '100%',
+                  imageRendering: 'pixelated'
                 }}
               />
             </div>
@@ -804,7 +857,7 @@ useEffect(() => {
           </div>
         </>
       ) : (
-        <div className="d-flex justify-content-center align-items-center bg-light" style={{ height: '300px' }}>
+        <div className="d-flex justify-content-center align-items-center bg-light" style={{ height: isMobile ? '40vh' : '300px' }}>
           <div className="text-center">
             <p>Загрузите фотографию для начала работы</p>
             <Button 
@@ -816,9 +869,34 @@ useEffect(() => {
           </div>
         </div>
       )}
-    </Col>
-  </Row>
-</Container>
+    </>
+  );
+
+  return (
+    <Container className="my-4">
+      <h1 className="text-center mb-4">Учет досок на фотографии</h1>
+      <Row className="mb-4">
+        {isMobile ? (
+          <>
+            <Col xs={12} className="mb-3">
+              {renderFormsSection()}
+            </Col>
+            <Col xs={12}>
+              {renderImageSection()}
+            </Col>
+          </>
+        ) : (
+          <>
+            <Col md={6}>
+              {renderFormsSection()}
+            </Col>
+            <Col md={6}>
+              {renderImageSection()}
+            </Col>
+          </>
+        )}
+      </Row>
+    </Container>
   );
 }
 
