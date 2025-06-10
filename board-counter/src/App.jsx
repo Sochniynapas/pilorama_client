@@ -497,7 +497,7 @@ function App() {
     const tableStartRow = image ? 25 : 4;
 
     worksheet.getCell(`A${tableStartRow}`).value = '№';
-    worksheet.getCell(`B${tableStartRow}`).value = 'Размер доски (см)';
+    worksheet.getCell(`B${tableStartRow}`).value = 'Размер доски (мм)';
     worksheet.getCell(`C${tableStartRow}`).value = 'Количество';
     worksheet.getCell(`D${tableStartRow}`).value = 'Цвет';
 
@@ -682,8 +682,8 @@ function App() {
           <Table striped bordered hover>
             <thead>
               <tr>
-                <th>Ширина (см)</th>
-                <th>Длина (см)</th>
+                <th>Ширина (мм)</th>
+                <th>Длина (мм)</th>
                 <th>Цвет</th>
                 <th>Действия</th>
               </tr>
@@ -827,7 +827,7 @@ function App() {
                       if (count === 0) return null;
                       return (
                         <tr key={log.id}>
-                          <td>{log.width}x{log.height} см</td>
+                          <td>{log.width}x{log.height} мм</td>
                           <td>
                             <div 
                               style={{
