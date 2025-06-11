@@ -40,6 +40,7 @@ function App() {
   const [clickStartTime, setClickStartTime] = useState(0);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [dragSpeed, setDragSpeed] = useState(1.5);
+  const [excelSheets, setExcelSheets] = useState([]);
   
   // Refs
   const canvasRef = useRef(null);
@@ -453,59 +454,74 @@ function App() {
     return `${day}.${month}.${date.getFullYear()}`;
   };
 
-  const getBoardSummary = () => {
-    const summary = {};
-    boardMarks.forEach((mark) => {
-      const log = logs.find((l) => l.id === mark.logId);
-      if (log) {
-        const key = `${log.width}x${log.height}`;
-        summary[key] = (summary[key] || 0) + 1;
-      }
-    });
-    return summary;
+const getBoardSummary = (marks, logs) => {
+  const summary = {};
+  marks.forEach((mark) => {
+    const log = logs.find((l) => l.id === mark.logId);
+    if (log) {
+      const key = `${log.width}x${log.height}`;
+      summary[key] = (summary[key] || 0) + 1;
+    }
+  });
+  return summary;
+};
+
+const addToExcel = () => {
+  if (!image || boardMarks.length === 0) {
+    alert('Нет данных для добавления');
+    return;
+  }
+
+  const sheetName = `Фото_${excelSheets.length + 1}`;
+  const newSheet = {
+    name: sheetName,
+    imageData: canvasRef.current.toDataURL('image/png'),
+    logs: [...logs], // Сохраняем текущий список размеров бревен
+    boardMarks: [...boardMarks],
+    documentNumber: documentNumber || 'Без номера'
   };
 
-  const getTotalCount = () => boardMarks.length;
+  setExcelSheets([...excelSheets, newSheet]);
+  alert(`Страница "${sheetName}" успешно добавлена`);
+};
+const exportToExcel = async () => {
+  if (excelSheets.length === 0) {
+    alert('Нет страниц для экспорта');
+    return;
+  }
 
-  const exportToExcel = async () => {
-    if (!documentNumber) {
-      alert('Введите номер документа');
-      return;
-    }
+  const workbook = new ExcelJS.Workbook();
+  excelSheets.forEach((sheet, index) => {
+    const worksheet = workbook.addWorksheet(sheet.name);
 
-    const currentDate = formatDate(new Date());
-    const fileName = `Учет досок ${documentNumber} от ${currentDate}.xlsx`;
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Учет досок');
-
+    // Добавляем заголовок
     worksheet.getCell('A1').value = `Документ №: ${documentNumber}`;
-    worksheet.getCell('A2').value = `Дата: ${currentDate}`;
+    worksheet.getCell('A2').value = `Дата: ${formatDate(new Date())}`;
 
-    if (canvasRef.current && image) {
+    // Добавляем изображение
+    if (sheet.imageData) {
       const imageId = workbook.addImage({
-        base64: canvasRef.current.toDataURL('image/png'),
-        extension: 'png'
+        base64: sheet.imageData.split(',')[1], // Убираем префикс data:image/png;base64,
+        extension: 'png',
       });
-
       worksheet.addImage(imageId, {
         tl: { col: 1, row: 3 },
         ext: { width: 500, height: 300 }
       });
     }
 
-    const tableStartRow = image ? 25 : 4;
-
+    // Добавляем таблицу
+    const tableStartRow = 25;
     worksheet.getCell(`A${tableStartRow}`).value = '№';
     worksheet.getCell(`B${tableStartRow}`).value = 'Размер доски (мм)';
     worksheet.getCell(`C${tableStartRow}`).value = 'Количество';
     worksheet.getCell(`D${tableStartRow}`).value = 'Цвет';
 
-    const summary = getBoardSummary();
-    Object.entries(summary).forEach(([size, count], index) => {
-      const log = logs.find((l) => `${l.width}x${l.height}` === size);
-      const row = tableStartRow + index + 1;
-      worksheet.getCell(`A${row}`).value = index + 1;
+    const summary = getBoardSummary(sheet.boardMarks, sheet.logs);
+    Object.entries(summary).forEach(([size, count], idx) => {
+      const log = sheet.logs.find((l) => `${l.width}x${l.height}` === size);
+      const row = tableStartRow + idx + 1;
+      worksheet.getCell(`A${row}`).value = idx + 1;
       worksheet.getCell(`B${row}`).value = size;
       worksheet.getCell(`C${row}`).value = count;
       worksheet.getCell(`D${row}`).fill = {
@@ -517,7 +533,7 @@ function App() {
 
     const totalRow = tableStartRow + Object.keys(summary).length + 1;
     worksheet.getCell(`B${totalRow}`).value = 'Всего досок';
-    worksheet.getCell(`C${totalRow}`).value = getTotalCount();
+    worksheet.getCell(`C${totalRow}`).value = sheet.boardMarks.length;
 
     worksheet.columns = [
       { key: 'number', width: 5 },
@@ -525,10 +541,20 @@ function App() {
       { key: 'count', width: 12 },
       { key: 'color', width: 10 }
     ];
+  });
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), fileName);
-  };
+  const buffer = await workbook.xlsx.writeBuffer();
+  const currentDate = formatDate(new Date());
+  const fileName = `Учет досок_${documentNumber}_${currentDate}.xlsx`;
+  saveAs(new Blob([buffer]), fileName);
+
+  // Очистка после экспорта
+  setExcelSheets([]);
+  setImage(null);
+  setLogs([]);
+  setBoardMarks([]);
+  setDocumentNumber('');
+};
 
   // Touch events
   useEffect(() => {
@@ -741,12 +767,34 @@ function App() {
         </Form.Group>
         <Button 
           variant="success" 
-          onClick={exportToExcel}
-          disabled={boardMarks.length === 0 || !documentNumber}
-          className="w-100"
+          onClick={addToExcel}
+          disabled={!image || boardMarks.length === 0}
+          className="w-100 mt-3"
         >
-          Экспорт в Excel
+          Добавить в Excel
         </Button>
+
+        {/* Кнопка "Выгрузить Excel" */}
+        <Button 
+          variant="primary" 
+          onClick={exportToExcel}
+          disabled={excelSheets.length === 0 || !documentNumber}
+          className="w-100 mt-3"
+        >
+          Выгрузить Excel
+        </Button>
+        <div className="border p-3 mb-3">
+          <h5>Добавленные страницы</h5>
+          {excelSheets.length === 0 ? (
+            <Alert variant="info">Нет добавленных страниц</Alert>
+          ) : (
+            <ul>
+              {excelSheets.map((sheet, i) => (
+                <li key={i}>{sheet.name}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </>
   );
