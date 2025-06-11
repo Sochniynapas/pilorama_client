@@ -430,7 +430,17 @@ function App() {
     };
     img.src = image;
   }, [image, boardMarks, logs, zoomLevel, canvasOffset, markerSize, isMobile]);
+useEffect(() => {
+  if (!image) return;
 
+  // При загрузке новой фотографии — сбросить nextMarkId у всех логов
+  setLogs((prevLogs) =>
+    prevLogs.map((log) => ({
+      ...log,
+      nextMarkId: 1
+    }))
+  );
+}, [image]);
   const drawMark = (ctx, x, y, color, number) => {
     const markSizeInPixels = dynamicMarkerSize * window.devicePixelRatio;
     ctx.beginPath();
