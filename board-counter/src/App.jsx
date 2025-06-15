@@ -42,6 +42,7 @@ function App() {
   const [dragSpeed, setDragSpeed] = useState(2.5);
   const [expandedImages, setExpandedImages] = useState(true);
   const [logsPanelOpen , setLogsPanelOpen ] = useState(true);
+  const [showMarkerPreview, setShowMarkerPreview] = useState(false);
 
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -244,13 +245,16 @@ const deleteImage = (imageId, e) => {
   setImagesData(updatedImageData);
 };
 
-  const processClick = (imageX, imageY, imageId) => {
+const processClick = (imageX, imageY, imageId) => {
     const currentImageData = imagesData.find(data => data.id === imageId);
     if (!currentImageData || !currentImageData.image) return;
 
+    // Уменьшаем зону клика для удаления маркера (теперь 1.2 размера маркера вместо 2)
+    const clickRadius = (currentImageMarkerSize || globalMarkerSize) * 1.2;
+
     const clickedMark = currentImageData.boardMarks.find((mark) => {
       const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
-      return distance <= dynamicMarkerSize;
+      return distance <= clickRadius;
     });
 
     if (clickedMark) {
@@ -543,19 +547,15 @@ useEffect(() => {
   const ctx = canvas.getContext('2d');
   const container = canvasContainerRef.current;
   
-  // Создаем новое изображение каждый раз
   const img = new Image();
   
   img.onload = () => {
-    // Сохраняем оригинальные размеры
     const naturalWidth = img.naturalWidth;
     const naturalHeight = img.naturalHeight;
     
-    // Устанавливаем реальные размеры canvas
     canvas.width = naturalWidth;
     canvas.height = naturalHeight;
     
-    // Рассчитываем размеры для отображения
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
     const aspectRatio = naturalWidth / naturalHeight;
@@ -570,11 +570,9 @@ useEffect(() => {
       displayHeight = containerWidth / aspectRatio;
     }
     
-    // Устанавливаем CSS-размеры
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
     
-    // Отрисовка
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(canvasOffset.x, canvasOffset.y);
@@ -588,18 +586,31 @@ useEffect(() => {
         if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number, mark.size);
       });
     }
+    
+    // Отрисовка превью размера маркера
+    if (showMarkerPreview) {
+      const centerX = naturalWidth / 2;
+      const centerY = naturalHeight / 2;
+      const previewSize = currentImageMarkerSize || globalMarkerSize;
+      
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, previewSize, 0, 2 * Math.PI);
+      ctx.fillStyle = color + '80'; // Добавляем прозрачность
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${previewSize * 0.8}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', centerX, centerY);
+    }
+    
     ctx.restore();
   };
   
-  img.onerror = () => {
-    console.error("Ошибка загрузки изображения");
-  };
-  
-  // Устанавливаем src после создания обработчиков
+  img.onerror = () => console.error("Ошибка загрузки изображения");
   img.src = currentImage.image;
   imgRef.current = img;
-
-}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize]);
+}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, currentImageMarkerSize, color]);
 const drawMark = (ctx, x, y, color, number, size) => {
   const markSizeInPixels = (size || globalMarkerSize) * window.devicePixelRatio;
   
@@ -1341,6 +1352,10 @@ const renderImageSection = () => (
                     setGlobalMarkerSize(newSize);
                   }
                 }}
+                onMouseDown={() => setShowMarkerPreview(true)}
+                onMouseUp={() => setShowMarkerPreview(false)}
+                onTouchStart={() => setShowMarkerPreview(true)}
+                onTouchEnd={() => setShowMarkerPreview(false)}
                 style={{ accentColor: colorPalette.primary }}
               />
             </Form.Group>
