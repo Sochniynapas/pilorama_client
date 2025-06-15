@@ -940,7 +940,17 @@ const renderImageSection = () => (
             borderRadius: '8px'
           }}>
             <Button 
-              onClick={() => setLogsPanelOpen(!logsPanelOpen)}
+              onClick={(e) => {
+                setLogsPanelOpen(!logsPanelOpen);
+                e.stopPropagation(); // Блокируем распространение события
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => {
+                setLogsPanelOpen(!logsPanelOpen);
+                e.stopPropagation(); // Блокируем распространение события
+              }}
+              onTouchMove={(e) => e.stopPropagation()}
               style={{
                 ...styles.buttonPrimary,
                 width: '100%',
@@ -959,7 +969,13 @@ const renderImageSection = () => (
             </Button>
             
             {logsPanelOpen && (
-              <div style={{
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+               style={{
                 backgroundColor: 'white',
                 border: `1px solid ${colorPalette.border}`,
                 borderTop: 'none',
@@ -988,7 +1004,14 @@ const renderImageSection = () => (
                                 : 'white',
                               cursor: 'pointer'
                             }}
-                            onClick={() => handleLogSelect(log)}
+                            onClick={(e) => {
+                              handleLogSelect(log);
+                              e.stopPropagation(); // Блокируем распространение
+                            }}
+                            onTouchEnd={(e) => {
+                              handleLogSelect(log);
+                              e.stopPropagation();
+                            }}
                           >
                             <td style={{ 
                               padding: '8px',
@@ -1012,6 +1035,10 @@ const renderImageSection = () => (
                               <Button 
                                 size="sm"
                                 onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteLog(log.id);
+                                }}
+                                onTouchEnd={(e) => {
                                   e.stopPropagation();
                                   deleteLog(log.id);
                                 }}
