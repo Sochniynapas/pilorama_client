@@ -612,7 +612,7 @@ useEffect(() => {
   imgRef.current = img;
 }, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, currentImageMarkerSize, color]);
 const drawMark = (ctx, x, y, color, number, size) => {
-  const markSizeInPixels = (size || globalMarkerSize) * window.devicePixelRatio;
+  const markSizeInPixels = (size || globalMarkerSize) ;
   
   // Рисуем круг (только заливка, без обводки)
   ctx.beginPath();
