@@ -162,37 +162,47 @@ function App() {
     return () => window.removeEventListener('resize', checkIfMobile);
   }, []);
 
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+ const handleImageUpload = (e) => {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
 
-    const newImages = files.map((file, index) => {
-      const imageId = Date.now() + index;
-      return {
-        id: imageId,
-        image: URL.createObjectURL(file),
-        logs: [],
-        boardMarks: [],
-        name: `Фото ${imagesData.length + index + 1}`
-      };
-    });
+  const newImages = files.map((file, index) => {
+    const imageId = Date.now() + index;
+    return {
+      id: imageId,
+      image: URL.createObjectURL(file),
+      file, // Сохраняем сам файл
+      logs: [],
+      boardMarks: [],
+      name: `Фото ${imagesData.length + index + 1}`
+    };
+  });
 
-    setImagesData(prev => [...prev, ...newImages]);
-  };
+  setImagesData(prev => [...prev, ...newImages]);
+};
 
-  const deleteImage = (imageId, e) => {
-    e.stopPropagation();
-    setImagesData(prev => {
-      const newImages = prev.filter(img => img.id !== imageId);
-      return newImages.map((img, index) => ({
-        ...img,
-        name: `Фото ${index + 1}`
-      }));
-    });
-    if (currentImageId === imageId) {
-      setCurrentImageId(null);
-    }
-  };
+const deleteImage = (imageId, e) => {
+  e.stopPropagation();
+  
+  // Находим изображение для удаления
+  const imageToDelete = imagesData.find(img => img.id === imageId);
+  // Отзываем Blob-URL если он существует
+  if (imageToDelete?.image?.startsWith('blob:')) {
+    URL.revokeObjectURL(imageToDelete.image);
+  }
+
+  setImagesData(prev => {
+    const newImages = prev.filter(img => img.id !== imageId);
+    return newImages.map((img, index) => ({
+      ...img,
+      name: `Фото ${index + 1}`
+    }));
+  });
+  
+  if (currentImageId === imageId) {
+    setCurrentImageId(null);
+  }
+};
 
   const deleteMark = (clickedMark, imageId) => {
   const updatedImageData = imagesData.map(data => {
@@ -201,7 +211,7 @@ function App() {
     // Фильтруем удаляемый маркер
     const filteredMarks = data.boardMarks.filter(mark => mark.id !== clickedMark.id);
 
-    // Обновляем нумерацию маркеров для соответствующего бревна
+    // Обновляем нумерацию маркеров для соответствующей доски
     const updatedMarks = filteredMarks.map(mark => {
       if (mark.logId === clickedMark.logId) {
         // Если номер маркера больше удаленного - уменьшаем на 1
@@ -211,10 +221,10 @@ function App() {
       return mark;
     });
 
-    // Обновляем nextMarkId в соответствующем бревне
+    // Обновляем nextMarkId в соответствующей доске
     const updatedLogs = data.logs.map(log => {
       if (log.id === clickedMark.logId) {
-        // Находим максимальный номер маркера для этого бревна
+        // Находим максимальный номер маркера для этой доски
         const maxNumber = updatedMarks
           .filter(mark => mark.logId === log.id)
           .reduce((max, mark) => Math.max(max, mark.number), 0);
@@ -502,53 +512,64 @@ useEffect(() => {
   const canvas = canvasRef.current;
   const ctx = canvas.getContext('2d');
   const container = canvasContainerRef.current;
+  
+  // Создаем новое изображение каждый раз
   const img = new Image();
   
   img.onload = () => {
-    imgRef.current = img;
-
-    // Устанавливаем физические размеры canvas равными размерам изображения
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-
-    // Рассчитываем соотношение сторон изображения
-    const imgAspectRatio = img.naturalWidth / img.naturalHeight;
+    // Сохраняем оригинальные размеры
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
     
-    // Получаем доступные размеры контейнера
+    // Устанавливаем реальные размеры canvas
+    canvas.width = naturalWidth;
+    canvas.height = naturalHeight;
+    
+    // Рассчитываем размеры для отображения
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
+    const aspectRatio = naturalWidth / naturalHeight;
     
-    // Рассчитываем размеры для отображения с сохранением пропорций
-    let displayWidth = containerWidth;
-    let displayHeight = containerHeight;
+    let displayWidth, displayHeight;
     
-    if (containerWidth / containerHeight > imgAspectRatio) {
-      displayWidth = containerHeight * imgAspectRatio;
+    if (containerWidth / containerHeight > aspectRatio) {
+      displayHeight = containerHeight;
+      displayWidth = containerHeight * aspectRatio;
     } else {
-      displayHeight = containerWidth / imgAspectRatio;
+      displayWidth = containerWidth;
+      displayHeight = containerWidth / aspectRatio;
     }
-
-    // Устанавливаем CSS-размеры canvas
+    
+    // Устанавливаем CSS-размеры
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
     
-    // Очищаем и рисуем изображение
+    // Отрисовка
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(canvasOffset.x, canvasOffset.y);
     ctx.scale(zoomLevel, zoomLevel);
-    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
-
-    // Рисуем маркеры
-    currentImage.boardMarks.forEach((mark) => {
-      const log = currentImage.logs.find((l) => l.id === mark.logId);
-      if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number, mark.size);
-    });
+    ctx.drawImage(img, 0, 0, naturalWidth, naturalHeight);
+    
+    // Отрисовка маркеров
+    if (currentImage.boardMarks?.length > 0) {
+      currentImage.boardMarks.forEach((mark) => {
+        const log = currentImage.logs.find((l) => l.id === mark.logId);
+        if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number, mark.size);
+      });
+    }
     ctx.restore();
   };
   
+  img.onerror = () => {
+    console.error("Ошибка загрузки изображения");
+  };
+  
+  // Устанавливаем src после создания обработчиков
   img.src = currentImage.image;
-}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, isMobile]);
+  imgRef.current = img;
+
+}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize]);
 const drawMark = (ctx, x, y, color, number, size) => {
   const markSizeInPixels = (size || globalMarkerSize) * window.devicePixelRatio;
   ctx.beginPath();
@@ -570,108 +591,147 @@ const drawMark = (ctx, x, y, color, number, size) => {
     return `${day}.${month}.${date.getFullYear()}`;
   };
 
-  const getBoardSummary = (marks, logs) => {
-    const summary = {};
-    marks.forEach((mark) => {
-      const log = logs.find((l) => l.id === mark.logId);
+const exportToExcel = async () => {
+  if (imagesData.length === 0) {
+    alert('Нет данных для экспорта');
+    return;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d');
+
+  const imagePromises = imagesData.map(async (imageData, index) => {
+    const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
+    
+    // Заголовок документа
+    worksheet.getCell('A1').value = `Документ №: ${documentNumber || 'Без номера'}`;
+    worksheet.getCell('A2').value = `Дата: ${formatDate(new Date())}`;
+    worksheet.getCell('A3').value = `Изображение: ${imageData.name}`;
+
+    // Рисуем изображение с маркерами
+    const imgWithMarks = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        tempCanvas.width = img.naturalWidth;
+        tempCanvas.height = img.naturalHeight;
+        tempCtx.drawImage(img, 0, 0);
+        
+        imageData.boardMarks.forEach(mark => {
+          const log = imageData.logs.find(l => l.id === mark.logId);
+          if (log) {
+            const markSize = mark.size || globalMarkerSize;
+            tempCtx.beginPath();
+            tempCtx.arc(mark.x, mark.y, markSize, 0, 2 * Math.PI);
+            tempCtx.fillStyle = log.color;
+            tempCtx.fill();
+            tempCtx.strokeStyle = '#fff';
+            tempCtx.lineWidth = 2;
+            tempCtx.stroke();
+            tempCtx.fillStyle = '#fff';
+            tempCtx.font = `bold ${markSize * 0.8}px Arial`;
+            tempCtx.textAlign = 'center';
+            tempCtx.textBaseline = 'middle';
+            tempCtx.fillText(mark.number.toString(), mark.x, mark.y);
+          }
+        });
+        
+        resolve(tempCanvas.toDataURL('image/png'));
+      };
+      img.src = imageData.image;
+    });
+
+    // Добавляем изображение в Excel
+    const imageId = workbook.addImage({
+      base64: imgWithMarks.split(',')[1],
+      extension: 'png',
+    });
+    
+    worksheet.addImage(imageId, {
+      tl: { col: 1, row: 4 },
+      ext: { width: 500, height: 300 }
+    });
+
+    // Таблица с информацией о досках (начинаем с 35 строки)
+    const startRow = 35;
+    
+    // Заголовки таблицы (добавили колонку с цветом)
+    worksheet.getCell(`A${startRow}`).value = 'Размер доски';
+    worksheet.getCell(`B${startRow}`).value = 'Количество';
+    worksheet.getCell(`C${startRow}`).value = 'Цвет маркера';
+    
+    // Стили для заголовков
+    ['A', 'B', 'C'].forEach(col => {
+      const cell = worksheet.getCell(`${col}${startRow}`);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF196C2F' } // Зеленый фон как в приложении
+      };
+      cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+      cell.alignment = { horizontal: 'center' };
+    });
+
+    // Собираем статистику по доскам
+    const logStats = {};
+    imageData.boardMarks.forEach(mark => {
+      const log = imageData.logs.find(l => l.id === mark.logId);
       if (log) {
         const key = `${log.width}x${log.height}`;
-        summary[key] = (summary[key] || 0) + 1;
-      }
-    });
-    return summary;
-  };
-
-   const exportToExcel = async () => {
-    if (imagesData.length === 0) {
-      alert('Нет данных для экспорта');
-      return;
-    }
-
-    const workbook = new ExcelJS.Workbook();
-    const imagePromises = imagesData.map(async (imageData, index) => {
-      const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
-      worksheet.getCell('A1').value = `Документ №: ${documentNumber || 'Без номера'}`;
-      worksheet.getCell('A2').value = `Дата: ${formatDate(new Date())}`;
-
-      if (imageData.image) {
-        try {
-          const base64Image = await new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0);
-              imageData.boardMarks.forEach((mark) => {
-                const log = imageData.logs.find((l) => l.id === mark.logId);
-                if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number, mark.size);
-              });
-              resolve(canvas.toDataURL('image/png'));
-            };
-            img.src = imageData.image;
-          });
-
-          const imageId = workbook.addImage({
-            base64: base64Image.split(',')[1],
-            extension: 'png',
-          });
-          worksheet.addImage(imageId, {
-            tl: { col: 1, row: 3 },
-            ext: { width: 500, height: 300 }
-          });
-        } catch (error) {
-          console.error(`Ошибка при добавлении изображения:`, error);
+        if (!logStats[key]) {
+          logStats[key] = {
+            count: 0,
+            color: log.color
+          };
         }
+        logStats[key].count++;
       }
-
-      const tableStartRow = 25;
-      worksheet.getCell(`A${tableStartRow}`).value = '№';
-      worksheet.getCell(`B${tableStartRow}`).value = 'Размер доски (мм)';
-      worksheet.getCell(`C${tableStartRow}`).value = 'Количество';
-      worksheet.getCell(`D${tableStartRow}`).value = 'Цвет';
-
-      const summary = getBoardSummary(imageData.boardMarks, imageData.logs);
-      Object.entries(summary).forEach(([size, count], idx) => {
-        const log = imageData.logs.find((l) => `${l.width}x${l.height}` === size);
-        const row = tableStartRow + idx + 1;
-        worksheet.getCell(`A${row}`).value = idx + 1;
-        worksheet.getCell(`B${row}`).value = size;
-        worksheet.getCell(`C${row}`).value = count;
-        worksheet.getCell(`D${row}`).fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: log?.color.replace('#', '') || '000000' }
-        };
-      });
-
-      const totalRow = tableStartRow + Object.keys(summary).length + 1;
-      worksheet.getCell(`B${totalRow}`).value = 'Всего досок';
-      worksheet.getCell(`C${totalRow}`).value = imageData.boardMarks.length;
-
-      worksheet.columns = [
-        { key: 'number', width: 5 },
-        { key: 'size', width: 15 },
-        { key: 'count', width: 12 },
-        { key: 'color', width: 10 }
-      ];
     });
 
-    await Promise.all(imagePromises);
-    const buffer = await workbook.xlsx.writeBuffer();
-    const currentDate = formatDate(new Date());
-    const fileName = `Учет досок_${documentNumber}_${currentDate}.xlsx`;
-    saveAs(new Blob([buffer]), fileName);
+    // Заполняем таблицу
+    let row = startRow + 1;
+    Object.entries(logStats).forEach(([size, data]) => {
+      worksheet.getCell(`A${row}`).value = size;
+      
+      // Ячейка с цветом (заливаем цветом маркера)
+      const colorCell = worksheet.getCell(`B${row}`);
+      colorCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: data.color.replace('#', 'FF') }
+      };
+      
+      worksheet.getCell(`C${row}`).value = data.count;
+      row++;
+    });
 
-    setImagesData([]);
-    setCurrentImageId(null);
-    setWidth('');
-    setHeight('');
-    setColor(colorPalette.accent);
-    setSelectedLog(null);
-    setDocumentNumber('');
-  };
+    // Автонастройка ширины столбцов
+    worksheet.columns = [
+      { key: 'size', width: 20 },
+      { key: 'color', width: 20 },
+      { key: 'count', width: 15 }
+    ];
+  });
+
+  await Promise.all(imagePromises);
+  
+  const buffer = await workbook.xlsx.writeBuffer();
+  const currentDate = formatDate(new Date());
+  const fileName = `Учет досок_${documentNumber}_${currentDate}.xlsx`;
+  saveAs(new Blob([buffer]), fileName);
+
+  // Полная очистка всех данных после экспорта
+  setImagesData([]);
+  setCurrentImageId(null);
+  setWidth('');
+  setHeight('');
+  setColor(colorPalette.accent);
+  setSelectedLog(null);
+  setDocumentNumber('');
+  setGlobalMarkerSize(isMobile ? 40 : 20);
+  setCurrentImageMarkerSize(null);
+  localStorage.removeItem('appState');
+};
 
   useEffect(() => {
     const container = canvasContainerRef.current;
@@ -699,11 +759,123 @@ const drawMark = (ctx, x, y, color, number, size) => {
     };
   }, []);
 
-  const dynamicMarkerSize = (currentImageMarkerSize || globalMarkerSize) * (isMobile ? 1.1 : 1);
+const dynamicMarkerSize = (currentImageMarkerSize || globalMarkerSize) * (isMobile ? 1.1 : 1);
+const saveFileToStorage = async (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified,
+        base64: reader.result // Сохраняем Base64
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+};
+useEffect(() => {
+  const saveState = async () => {
+    const imagesWithFileData = await Promise.all(
+      imagesData.map(async (img) => {
+        if (img.file) {
+          const fileData = await saveFileToStorage(img.file);
+          return { ...img, fileData };
+        }
+        return img;
+      })
+    );
 
+    const stateToSave = {
+      imagesData: imagesWithFileData.map(img => ({
+        ...img,
+        image: null, // Не сохраняем Blob URL
+        file: null   // Не сохраняем сам файл
+      })),
+      currentImageId,
+      width,
+      height,
+      color,
+      selectedLog,
+      globalMarkerSize,
+      documentNumber,
+    };
+    
+    localStorage.setItem('appState', JSON.stringify(stateToSave));
+  };
+
+  saveState();
+}, [imagesData, currentImageId, width, height, color, selectedLog, globalMarkerSize, documentNumber]);
+const restoreFileFromStorage = (fileData) => {
+  const byteString = atob(fileData.base64.split(',')[1]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new File([ab], fileData.name, {
+    type: fileData.type,
+    lastModified: fileData.lastModified
+  });
+};
+useEffect(() => {
+  const loadSavedState = async () => {
+    const savedState = localStorage.getItem('appState');
+    if (savedState) {
+      const parsedState = JSON.parse(savedState);
+      
+      // Восстанавливаем обычные состояния
+      setCurrentImageId(parsedState.currentImageId || null);
+      setWidth(parsedState.width || '');
+      setHeight(parsedState.height || '');
+      setColor(parsedState.color || colorPalette.accent);
+      setSelectedLog(parsedState.selectedLog || null);
+      setGlobalMarkerSize(parsedState.globalMarkerSize || (isMobile ? 40 : 20));
+      setDocumentNumber(parsedState.documentNumber || '');
+      
+      // Восстанавливаем изображения
+      if (parsedState.imagesData && parsedState.imagesData.length > 0) {
+        const restoredImages = await Promise.all(
+          parsedState.imagesData.map(async imgData => {
+            if (imgData.fileData) {
+              const file = restoreFileFromStorage(imgData.fileData);
+              return {
+                ...imgData,
+                image: URL.createObjectURL(file),
+                file
+              };
+            }
+            return imgData;
+          })
+        );
+        setImagesData(restoredImages);
+      }
+    }
+  };
+
+  loadSavedState();
+}, []);
+useEffect(() => {
+  return () => {
+    // Очищаем все Blob-URL при размонтировании
+    imagesData.forEach(img => {
+      if (img.image?.startsWith('blob:')) {
+        URL.revokeObjectURL(img.image);
+      }
+    });
+    
+    // Очищаем ссылку на изображение
+    if (imgRef.current) {
+      imgRef.current.onload = null;
+      imgRef.current.onerror = null;
+      imgRef.current = null;
+    }
+  };
+}, []);
 const renderFormsSection = () => (
   <>
-    <div style={styles.section}>
+    {/* <div style={styles.section}>
       <Form.Group controlId="formImage" className="mb-3">
         <Form.Label className="fw-bold" style={{ color: colorPalette.primary }}>
           📷 Загрузите фотографии с досками
@@ -726,7 +898,7 @@ const renderFormsSection = () => (
           </Button>
         </div>
       </Form.Group>
-    </div>
+    </div> */}
 
     <div style={styles.section}>
       <div 
@@ -807,7 +979,7 @@ const renderFormsSection = () => (
     </div>
 
     <div style={styles.section}>
-      <h4 style={{ color: colorPalette.primary }}>Добавить бревно</h4>
+      <h4 style={{ color: colorPalette.primary }}>Добавить размер</h4>
       <Row className="g-2">
         <Col sm={4}>
           <Form.Group controlId="formWidth" className="mb-3">
@@ -936,7 +1108,7 @@ const renderImageSection = () => (
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Плавающая панель бревен */}
+            {/* Плавающая панель размеров */}
           <div style={{
             position: 'absolute',
             top: '15px',
@@ -972,7 +1144,7 @@ const renderImageSection = () => (
             >
               <span>
                 <i className={`bi bi-list${logsPanelOpen ? '-check' : ''}`}></i>
-                {logsPanelOpen ? 'Скрыть список' : 'Бревна'}
+                {logsPanelOpen ? 'Скрыть список' : 'Доски'}
               </span>
               {logsPanelOpen && <i className="bi bi-x-lg"></i>}
             </Button>
@@ -999,7 +1171,7 @@ const renderImageSection = () => (
                       borderColor: colorPalette.border,
                       color: colorPalette.dark
                     }}>
-                      Нет бревен
+                      Нет досок
                     </Alert>
                   ) : (
                     <Table hover size="sm" className="m-0">
@@ -1160,14 +1332,14 @@ const renderImageSection = () => (
         </div>
         
         <div style={styles.section}>
-          <h4 style={{ color: colorPalette.primary }}>Статистика по бревнам</h4>
+          <h4 style={{ color: colorPalette.primary }}>Статистика по доскам</h4>
           {currentImageId && imagesData.find(data => data.id === currentImageId)?.boardMarks.length === 0 ? (
             <Alert variant="info" className="mb-0" style={{ 
               backgroundColor: colorPalette.background,
               borderColor: colorPalette.border,
               color: colorPalette.dark
             }}>
-              Нет размеченных бревен
+              Нет размеченных досок
             </Alert>
           ) : (
             <Table striped bordered hover size="sm" style={{ 
@@ -1230,6 +1402,14 @@ const renderImageSection = () => (
           <p style={{ color: colorPalette.dark, marginBottom: '20px' }}>
             Загрузите фотографии для начала работы
           </p>
+          <Form.Control 
+            type="file" 
+            accept="image/*" 
+            onChange={handleImageUpload} 
+            ref={fileInputRef}
+            multiple
+            style={{ display: 'none' }}
+          />
           <Button 
             style={styles.buttonPrimary}
             onClick={() => fileInputRef.current?.click()}
@@ -1248,7 +1428,7 @@ const renderImageSection = () => (
       <h1 className="text-center mb-4" style={{ color: colorPalette.primary }}>
         Учет досок на фотографии
       </h1>
-      <Row className="mb-4">
+      <Row style={{justifyContent:'center'}} className="mb-4">
         {(isMobile || window.innerWidth < 1000) ? (
           <>
             <Col xs={12} className="mb-3">
@@ -1260,11 +1440,11 @@ const renderImageSection = () => (
           </>
         ) : (
           <>
-            <Col lg={5} md={5}>
-              {renderFormsSection()}
-            </Col>
-            <Col lg={6} md={7}>
+            <Col xs={7}>
               {renderImageSection()}
+            </Col>
+            <Col xs={7} className="mb-3">
+              {renderFormsSection()}
             </Col>
           </>
         )}
