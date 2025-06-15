@@ -26,7 +26,6 @@ function App() {
   const [color, setColor] = useState(colorPalette.accent);
   const [selectedLog, setSelectedLog] = useState(null);
   const [globalMarkerSize, setGlobalMarkerSize] = useState(isMobile ? 40 : 20);
-  const [currentImageMarkerSize, setCurrentImageMarkerSize] = useState(null);
   const [showColorPalette, setShowColorPalette] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -163,7 +162,7 @@ function App() {
     return () => window.removeEventListener('resize', checkIfMobile);
   }, []);
 
- const handleImageUpload = (e) => {
+const handleImageUpload = (e) => {
   const files = Array.from(e.target.files);
   if (files.length === 0) return;
 
@@ -172,10 +171,11 @@ function App() {
     return {
       id: imageId,
       image: URL.createObjectURL(file),
-      file, // Сохраняем сам файл
+      file,
       logs: [],
       boardMarks: [],
-      name: `Фото ${imagesData.length + index + 1}`
+      name: `Фото ${imagesData.length + index + 1}`,
+      markerSize: globalMarkerSize // Добавляем размер маркера по умолчанию
     };
   });
 
@@ -250,7 +250,7 @@ const processClick = (imageX, imageY, imageId) => {
     if (!currentImageData || !currentImageData.image) return;
 
     // Уменьшаем зону клика для удаления маркера (теперь 1.2 размера маркера вместо 2)
-    const clickRadius = (currentImageMarkerSize || globalMarkerSize) * 1.2;
+    const clickRadius = (currentImageData.markerSize || globalMarkerSize) * 1.2;
 
     const clickedMark = currentImageData.boardMarks.find((mark) => {
       const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
@@ -274,7 +274,6 @@ const processClick = (imageX, imageY, imageId) => {
         logId: selectedLog.id,
         color: selectedLog.color,
         number: nextNumber,
-        size: currentImageMarkerSize || globalMarkerSize
       };
 
       const updatedLogs = currentImageData.logs.map(log =>
@@ -583,7 +582,7 @@ useEffect(() => {
     if (currentImage.boardMarks?.length > 0) {
       currentImage.boardMarks.forEach((mark) => {
         const log = currentImage.logs.find((l) => l.id === mark.logId);
-        if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number, mark.size);
+        if (log) drawMark(ctx, mark.x, mark.y, log.color, mark.number, null, currentImage.id);
       });
     }
     
@@ -591,11 +590,11 @@ useEffect(() => {
     if (showMarkerPreview) {
       const centerX = naturalWidth / 2;
       const centerY = naturalHeight / 2;
-      const previewSize = (currentImageMarkerSize || globalMarkerSize) * window.devicePixelRatio;
+      const previewSize = (currentImage.markerSize || globalMarkerSize) * window.devicePixelRatio;
       
       ctx.beginPath();
       ctx.arc(centerX, centerY, previewSize, 0, 2 * Math.PI);
-      ctx.fillStyle = color + '80'; // Добавляем прозрачность
+      ctx.fillStyle = color + '80';
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.font = `bold ${previewSize * 0.8}px Arial`;
@@ -610,18 +609,19 @@ useEffect(() => {
   img.onerror = () => console.error("Ошибка загрузки изображения");
   img.src = currentImage.image;
   imgRef.current = img;
-}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, currentImageMarkerSize, color]);
-const drawMark = (ctx, x, y, color, number, size) => {
-  const markSizeInPixels = (size || globalMarkerSize) * window.devicePixelRatio;
+}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, color]);
+const drawMark = (ctx, x, y, color, number, size, imageId) => {
+  const currentImage = imagesData.find(img => img.id === imageId);
+  // Всегда используем размер из изображения, игнорируя size из маркера
+  const markSizeInPixels = (currentImage?.markerSize || globalMarkerSize) * window.devicePixelRatio;
+
   
-  // Рисуем круг (только заливка, без обводки)
   ctx.beginPath();
   ctx.arc(x, y, markSizeInPixels, 0, 2 * Math.PI);
   ctx.fillStyle = color;
   ctx.fill();
   
-  // Рисуем цифру
-  ctx.fillStyle = '#fff'; // Белый цвет для цифры
+  ctx.fillStyle = '#fff';
   ctx.font = `bold ${markSizeInPixels * 0.8}px Arial`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -662,7 +662,7 @@ const exportToExcel = async () => {
         imageData.boardMarks.forEach(mark => {
           const log = imageData.logs.find(l => l.id === mark.logId);
           if (log) {
-            const markSize = (mark.size || globalMarkerSize ) * window.devicePixelRatio;
+            const markSize = (imageData.markerSize || globalMarkerSize) * window.devicePixelRatio;
             tempCtx.beginPath();
             tempCtx.arc(mark.x, mark.y, markSize, 0, 2 * Math.PI);
             tempCtx.fillStyle = log.color;
@@ -768,7 +768,6 @@ const exportToExcel = async () => {
   setSelectedLog(null);
   setDocumentNumber('');
   setGlobalMarkerSize(isMobile ? 40 : 20);
-  setCurrentImageMarkerSize(null);
   localStorage.removeItem('appState');
 };
 
@@ -798,7 +797,7 @@ const exportToExcel = async () => {
     };
   }, []);
 
-const dynamicMarkerSize = (currentImageMarkerSize || globalMarkerSize) * (isMobile ? 1.1 : 1);
+
 const saveFileToStorage = async (file) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -828,18 +827,19 @@ useEffect(() => {
 
     const stateToSave = {
       imagesData: imagesWithFileData.map(img => ({
-        ...img,
-        image: null, // Не сохраняем Blob URL
-        file: null   // Не сохраняем сам файл
-      })),
-      currentImageId,
-      width,
-      height,
-      color,
-      selectedLog,
-      globalMarkerSize,
-      documentNumber,
-    };
+      ...img,
+      image: null,
+      file: null,
+      markerSize: img.markerSize || globalMarkerSize
+    })),
+    currentImageId,
+    width,
+    height,
+    color,
+    selectedLog,
+    globalMarkerSize,
+    documentNumber,
+  };
     
     localStorage.setItem('appState', JSON.stringify(stateToSave));
   };
@@ -876,18 +876,19 @@ useEffect(() => {
       // Восстанавливаем изображения
       if (parsedState.imagesData && parsedState.imagesData.length > 0) {
         const restoredImages = await Promise.all(
-          parsedState.imagesData.map(async imgData => {
-            if (imgData.fileData) {
-              const file = restoreFileFromStorage(imgData.fileData);
-              return {
-                ...imgData,
-                image: URL.createObjectURL(file),
-                file
-              };
-            }
-            return imgData;
-          })
-        );
+  parsedState.imagesData.map(async imgData => {
+    if (imgData.fileData) {
+      const file = restoreFileFromStorage(imgData.fileData);
+      return {
+        ...imgData,
+        image: URL.createObjectURL(file),
+        file,
+        markerSize: imgData.markerSize || parsedState.globalMarkerSize || (isMobile ? 40 : 20)
+      };
+    }
+    return imgData;
+  })
+);
         setImagesData(restoredImages);
       }
     }
@@ -1328,37 +1329,41 @@ const renderImageSection = () => (
             </div>
             
             <Form.Group controlId="formMarkerSize" className="mb-3">
-              <Form.Label>Размер маркера: {currentImageMarkerSize || globalMarkerSize}px</Form.Label>
-              <Form.Range 
-                min="1" 
-                max="50" 
-                value={currentImageMarkerSize || globalMarkerSize}
-                onChange={(e) => {
-                  const newSize = parseInt(e.target.value);
-                  if (currentImageId) {
-                    setCurrentImageMarkerSize(newSize);
-                    setImagesData(prev => prev.map(img => 
-                      img.id === currentImageId
-                        ? {
-                            ...img,
-                            boardMarks: img.boardMarks.map(mark => ({
-                              ...mark,
-                              size: newSize
-                            }))
-                          }
-                        : img
-                    ));
-                  } else {
-                    setGlobalMarkerSize(newSize);
-                  }
-                }}
-                onMouseDown={() => setShowMarkerPreview(true)}
-                onMouseUp={() => setShowMarkerPreview(false)}
-                onTouchStart={() => setShowMarkerPreview(true)}
-                onTouchEnd={() => setShowMarkerPreview(false)}
-                style={{ accentColor: colorPalette.primary }}
-              />
-            </Form.Group>
+  <Form.Label>
+    Размер маркера: {currentImageId 
+      ? imagesData.find(img => img.id === currentImageId)?.markerSize || globalMarkerSize
+      : globalMarkerSize
+    }px
+    {currentImageId && (
+      <small className="text-muted ms-2">(только для этого изображения)</small>
+    )}
+  </Form.Label>
+  <Form.Range 
+    min="1" 
+    max="50" 
+    value={currentImageId 
+      ? imagesData.find(img => img.id === currentImageId)?.markerSize || globalMarkerSize
+      : globalMarkerSize
+    }
+    onChange={(e) => {
+      const newSize = parseInt(e.target.value);
+      if (currentImageId) {
+        setImagesData(prev => prev.map(img => 
+          img.id === currentImageId
+            ? { ...img, markerSize: newSize }
+            : img
+        ));
+      } else {
+        setGlobalMarkerSize(newSize);
+      }
+    }}
+    onMouseDown={() => setShowMarkerPreview(true)}
+    onMouseUp={() => setShowMarkerPreview(false)}
+    onTouchStart={() => setShowMarkerPreview(true)}
+    onTouchEnd={() => setShowMarkerPreview(false)}
+    style={{ accentColor: colorPalette.primary }}
+  />
+</Form.Group>
             
             <Form.Group controlId="formDragSpeed">
               <Form.Label>Скорость перетаскивания: {dragSpeed.toFixed(1)}x</Form.Label>
