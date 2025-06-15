@@ -347,79 +347,109 @@ const deleteImage = (imageId, e) => {
     setIsClick(false);
   };
 
-  const handleWheel = (e) => {
-    if (!currentImageId) return;
-    const container = canvasContainerRef.current;
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const imgX = (mouseX - canvasOffset.x) / zoomLevel;
-    const imgY = (mouseY - canvasOffset.y) / zoomLevel;
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.5, Math.min(3, zoomLevel * delta));
-    const newOffsetX = mouseX - imgX * newZoom;
-    const newOffsetY = mouseY - imgY * newZoom;
-    setZoomLevel(newZoom);
-    setCanvasOffset({ x: newOffsetX, y: newOffsetY });
-  };
+const handleWheel = (e) => {
+  if (!currentImageId) return;
+  const container = canvasContainerRef.current;
+  const rect = container.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  const imgX = (mouseX - canvasOffset.x) / zoomLevel;
+  const imgY = (mouseY - canvasOffset.y) / zoomLevel;
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  
+  // Убрано ограничение максимального масштаба (было Math.min(3, zoomLevel * delta))
+  const newZoom = Math.max(0.5, zoomLevel * delta); // Оставляем только минимальное ограничение
+  
+  const newOffsetX = mouseX - imgX * newZoom;
+  const newOffsetY = mouseY - imgY * newZoom;
+  setZoomLevel(newZoom);
+  setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+};
 
-  const handleTouchStart = (e) => {
-    if (e.cancelable) e.preventDefault();
-    touchStartTime.current = Date.now();
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      setIsDragging(true);
-      setDragStart({
-        x: touch.clientX,
-        y: touch.clientY,
-        offsetX: canvasOffset.x,
-        offsetY: canvasOffset.y
-      });
-    } else if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      setInitialDistance(dist);
-      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      setPinchCenter({ x: centerX, y: centerY });
-    }
-  };
+ const handleTouchStart = (e) => {
+  if (e.cancelable) e.preventDefault();
+  touchStartTime.current = Date.now();
+  
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragStart({
+      x: touch.clientX,
+      y: touch.clientY,
+      offsetX: canvasOffset.x,
+      offsetY: canvasOffset.y
+    });
+  } else if (e.touches.length === 2) {
+    // Правильно вычисляем начальное расстояние и центр
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+    
+    const dist = Math.hypot(
+      touch1.clientX - touch2.clientX,
+      touch1.clientY - touch2.clientY
+    );
+    
+    setInitialDistance(dist);
+    
+    const centerX = (touch1.clientX + touch2.clientX) / 2;
+    const centerY = (touch1.clientY + touch2.clientY) / 2;
+    
+    // Сохраняем центр относительно canvas
+    const containerRect = canvasContainerRef.current.getBoundingClientRect();
+    setPinchCenter({ 
+      x: centerX - containerRect.left, 
+      y: centerY - containerRect.top 
+    });
+  }
+};
 
-  const handleTouchMove = (e) => {
-    if (e.cancelable) e.preventDefault();
-    if (e.touches.length === 1 && isDragging) {
-      const touch = e.touches[0];
-      const dx = (touch.clientX - dragStart.x) * dragSpeed;
-      const dy = (touch.clientY - dragStart.y) * dragSpeed;
-      setCanvasOffset({
-        x: dragStart.offsetX + dx,
-        y: dragStart.offsetY + dy
-      });
-    } else if (e.touches.length === 2) {
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      const currentDistance = Math.hypot(
-        touch1.clientX - touch2.clientX,
-        touch1.clientY - touch2.clientY
-      );
-      if (initialDistance !== null) {
-        const scale = currentDistance / initialDistance;
-        const newZoom = Math.max(0.5, Math.min(3, zoomLevel * scale));
-        const centerX = (touch1.clientX + touch2.clientX) / 2;
-        const centerY = (touch1.clientY + touch2.clientY) / 2;
-        const containerRect = canvasContainerRef.current.getBoundingClientRect();
-        const imgX = (centerX - containerRect.left - canvasOffset.x) / zoomLevel;
-        const imgY = (centerY - containerRect.top - canvasOffset.y) / zoomLevel;
-        const newOffsetX = centerX - containerRect.left - imgX * newZoom;
-        const newOffsetY = centerY - containerRect.top - imgY * newZoom;
-        setZoomLevel(newZoom);
-        setCanvasOffset({ x: newOffsetX, y: newOffsetY });
-      }
-      setInitialDistance(currentDistance);
+const handleTouchMove = (e) => {
+  if (e.cancelable) e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    // Обработка перемещения
+    const touch = e.touches[0];
+    const dx = (touch.clientX - dragStart.x) * dragSpeed;
+    const dy = (touch.clientY - dragStart.y) * dragSpeed;
+    setCanvasOffset({
+      x: dragStart.offsetX + dx,
+      y: dragStart.offsetY + dy
+    });
+  } else if (e.touches.length === 2) {
+    // Обработка масштабирования
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+    const currentDistance = Math.hypot(
+      touch1.clientX - touch2.clientX,
+      touch1.clientY - touch2.clientY
+    );
+
+    if (initialDistance !== null) {
+      const scale = currentDistance / initialDistance;
+      const newZoom = Math.max(0.5, zoomLevel * scale);
+
+      // Правильный расчет центра между двумя пальцами
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+      // Получаем позицию центра относительно canvas
+      const containerRect = canvasContainerRef.current.getBoundingClientRect();
+      const relativeCenterX = centerX - containerRect.left;
+      const relativeCenterY = centerY - containerRect.top;
+
+      // Вычисляем позицию в координатах изображения
+      const imgX = (relativeCenterX - canvasOffset.x) / zoomLevel;
+      const imgY = (relativeCenterY - canvasOffset.y) / zoomLevel;
+
+      // Новые координаты с учетом нового масштаба
+      const newOffsetX = relativeCenterX - imgX * newZoom;
+      const newOffsetY = relativeCenterY - imgY * newZoom;
+
+      setZoomLevel(newZoom);
+      setCanvasOffset({ x: newOffsetX, y: newOffsetY });
     }
-  };
+    setInitialDistance(currentDistance);
+  }
+};
 
   const handleTouchEnd = (e) => {
     if (e.cancelable) e.preventDefault();
@@ -572,14 +602,15 @@ useEffect(() => {
 }, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize]);
 const drawMark = (ctx, x, y, color, number, size) => {
   const markSizeInPixels = (size || globalMarkerSize) * window.devicePixelRatio;
+  
+  // Рисуем круг (только заливка, без обводки)
   ctx.beginPath();
   ctx.arc(x, y, markSizeInPixels, 0, 2 * Math.PI);
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2 * window.devicePixelRatio;
-  ctx.stroke();
-  ctx.fillStyle = '#fff';
+  
+  // Рисуем цифру
+  ctx.fillStyle = '#fff'; // Белый цвет для цифры
   ctx.font = `bold ${markSizeInPixels * 0.8}px Arial`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -625,9 +656,6 @@ const exportToExcel = async () => {
             tempCtx.arc(mark.x, mark.y, markSize, 0, 2 * Math.PI);
             tempCtx.fillStyle = log.color;
             tempCtx.fill();
-            tempCtx.strokeStyle = '#fff';
-            tempCtx.lineWidth = 2;
-            tempCtx.stroke();
             tempCtx.fillStyle = '#fff';
             tempCtx.font = `bold ${markSize * 0.8}px Arial`;
             tempCtx.textAlign = 'center';
@@ -1431,11 +1459,11 @@ const renderImageSection = () => (
       <Row style={{justifyContent:'center'}} className="mb-4">
         {(isMobile || window.innerWidth < 1000) ? (
           <>
-            <Col xs={12} className="mb-3">
-              {renderFormsSection()}
-            </Col>
             <Col xs={12}>
               {renderImageSection()}
+            </Col>
+            <Col xs={12} className="mb-3">
+              {renderFormsSection()}
             </Col>
           </>
         ) : (
