@@ -195,35 +195,44 @@ function App() {
   };
 
   const deleteMark = (clickedMark, imageId) => {
-    const updatedImageData = imagesData.map(data =>
-      data.id === imageId
-        ? {
-            ...data,
-            boardMarks: data.boardMarks.filter((mark) => mark.id !== clickedMark.id),
-            logs: data.logs.map((log) => {
-              const marksForLog = data.boardMarks
-                .filter((mark) => mark.logId === log.id)
-                .sort((a, b) => a.number - b.number);
-              const renumberedMarks = data.boardMarks.map((mark) => {
-                if (mark.logId === log.id) {
-                  const newNumber = marksForLog.findIndex((m) => m.id === mark.id) + 1;
-                  return { ...mark, number: newNumber };
-                }
-                return mark;
-              });
-              const maxNumber = renumberedMarks
-                .filter((mark) => mark.logId === log.id)
-                .reduce((max, mark) => Math.max(max, mark.number), 0);
-              return {
-                ...log,
-                nextMarkId: maxNumber + 1
-              };
-            })
-          }
-        : data
-    );
-    setImagesData(updatedImageData);
-  };
+  const updatedImageData = imagesData.map(data => {
+    if (data.id !== imageId) return data;
+
+    // Фильтруем удаляемый маркер
+    const filteredMarks = data.boardMarks.filter(mark => mark.id !== clickedMark.id);
+
+    // Обновляем нумерацию маркеров для соответствующего бревна
+    const updatedMarks = filteredMarks.map(mark => {
+      if (mark.logId === clickedMark.logId) {
+        // Если номер маркера больше удаленного - уменьшаем на 1
+        const newNumber = mark.number > clickedMark.number ? mark.number - 1 : mark.number;
+        return { ...mark, number: newNumber };
+      }
+      return mark;
+    });
+
+    // Обновляем nextMarkId в соответствующем бревне
+    const updatedLogs = data.logs.map(log => {
+      if (log.id === clickedMark.logId) {
+        // Находим максимальный номер маркера для этого бревна
+        const maxNumber = updatedMarks
+          .filter(mark => mark.logId === log.id)
+          .reduce((max, mark) => Math.max(max, mark.number), 0);
+        
+        return { ...log, nextMarkId: maxNumber + 1 };
+      }
+      return log;
+    });
+
+    return {
+      ...data,
+      boardMarks: updatedMarks,
+      logs: updatedLogs
+    };
+  });
+
+  setImagesData(updatedImageData);
+};
 
   const processClick = (imageX, imageY, imageId) => {
     const currentImageData = imagesData.find(data => data.id === imageId);
