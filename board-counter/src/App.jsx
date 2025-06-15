@@ -722,14 +722,14 @@ const exportToExcel = async () => {
       worksheet.getCell(`A${row}`).value = size;
       
       // Ячейка с цветом (заливаем цветом маркера)
-      const colorCell = worksheet.getCell(`B${row}`);
+      const colorCell = worksheet.getCell(`C${row}`);
       colorCell.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: data.color.replace('#', 'FF') }
       };
       
-      worksheet.getCell(`C${row}`).value = data.count;
+      worksheet.getCell(`B${row}`).value = data.count;
       row++;
     });
 
