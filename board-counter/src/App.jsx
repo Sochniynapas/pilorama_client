@@ -591,7 +591,7 @@ useEffect(() => {
     if (showMarkerPreview) {
       const centerX = naturalWidth / 2;
       const centerY = naturalHeight / 2;
-      const previewSize = currentImageMarkerSize || globalMarkerSize;
+      const previewSize = (currentImageMarkerSize || globalMarkerSize) * window.devicePixelRatio;
       
       ctx.beginPath();
       ctx.arc(centerX, centerY, previewSize, 0, 2 * Math.PI);
@@ -612,7 +612,7 @@ useEffect(() => {
   imgRef.current = img;
 }, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, currentImageMarkerSize, color]);
 const drawMark = (ctx, x, y, color, number, size) => {
-  const markSizeInPixels = (size || globalMarkerSize) ;
+  const markSizeInPixels = (size || globalMarkerSize) * window.devicePixelRatio;
   
   // Рисуем круг (только заливка, без обводки)
   ctx.beginPath();
@@ -662,7 +662,7 @@ const exportToExcel = async () => {
         imageData.boardMarks.forEach(mark => {
           const log = imageData.logs.find(l => l.id === mark.logId);
           if (log) {
-            const markSize = mark.size || globalMarkerSize;
+            const markSize = (mark.size || globalMarkerSize ) * window.devicePixelRatio;
             tempCtx.beginPath();
             tempCtx.arc(mark.x, mark.y, markSize, 0, 2 * Math.PI);
             tempCtx.fillStyle = log.color;
