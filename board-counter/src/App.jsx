@@ -23,6 +23,7 @@ function App() {
   const [currentImageId, setCurrentImageId] = useState(null);
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('');
+  const [length, setLength] = useState('');
   const [color, setColor] = useState(colorPalette.accent);
   const [selectedLog, setSelectedLog] = useState(null);
   const [globalMarkerSize, setGlobalMarkerSize] = useState(isMobile ? 40 : 20);
@@ -107,8 +108,11 @@ function App() {
       backgroundColor: colorPalette.background,
       overflow: 'hidden',
       position: 'relative',
-      display: 'inline-block', // Изменяем на inline-block
-      maxWidth: '100%' // Ограничиваем максимальную ширину
+      width: '100%', // Занимаем всю ширину
+      minHeight: '300px', // Минимальная высота
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center'
     },
     canvasWrapper: {
       position: 'relative',
@@ -495,26 +499,28 @@ const handleTouchMove = (e) => {
     setCanvasOffset({ x: 0, y: 0 });
   };
 
-  const addLog = () => {
-    if (width && height) {
-      const newLog = {
-        id: Date.now(),
-        width: parseFloat(width),
-        height: parseFloat(height),
-        color,
-        nextMarkId: 1
-      };
+const addLog = () => {
+  if (width && height && length) {
+    const newLog = {
+      id: Date.now(),
+      width: parseFloat(width),
+      height: parseFloat(height),
+      length: parseFloat(length), // Добавляем длину
+      color,
+      nextMarkId: 1
+    };
 
-      const updatedImages = imagesData.map(imageData =>
-        currentImageId === imageData.id
-          ? { ...imageData, logs: [...imageData.logs, newLog] }
-          : imageData
-      );
-      setImagesData(updatedImages);
-      setWidth('');
-      setHeight('');
-    }
-  };
+    const updatedImages = imagesData.map(imageData =>
+      currentImageId === imageData.id
+        ? { ...imageData, logs: [...imageData.logs, newLog] }
+        : imageData
+    );
+    setImagesData(updatedImages);
+    setWidth('');
+    setHeight('');
+    setLength('');
+  }
+};
 
   const deleteLog = (id) => {
     const updatedImages = imagesData.map(imageData =>
@@ -552,26 +558,20 @@ useEffect(() => {
     const naturalWidth = img.naturalWidth;
     const naturalHeight = img.naturalHeight;
     
+    // Устанавливаем реальные размеры изображения для canvas
     canvas.width = naturalWidth;
     canvas.height = naturalHeight;
     
+    // Рассчитываем размеры для отображения с сохранением пропорций
     const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    const aspectRatio = naturalWidth / naturalHeight;
+    const scale = containerWidth / naturalWidth;
+    const displayHeight = naturalHeight * scale;
     
-    let displayWidth, displayHeight;
-    
-    if (containerWidth / containerHeight > aspectRatio) {
-      displayHeight = containerHeight;
-      displayWidth = containerHeight * aspectRatio;
-    } else {
-      displayWidth = containerWidth;
-      displayHeight = containerWidth / aspectRatio;
-    }
-    
-    canvas.style.width = `${displayWidth}px`;
+    // Устанавливаем CSS размеры canvas для отображения
+    canvas.style.width = `${containerWidth}px`;
     canvas.style.height = `${displayHeight}px`;
     
+    // Очищаем и рисуем изображение
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(canvasOffset.x, canvasOffset.y);
@@ -643,15 +643,19 @@ const exportToExcel = async () => {
   const tempCanvas = document.createElement('canvas');
   const tempCtx = tempCanvas.getContext('2d');
 
+  // Размеры ячеек Excel (в пикселях)
+  const EXCEL_ROW_HEIGHT = 20;
+  const EXCEL_COLUMN_WIDTH = 64;
+
   const imagePromises = imagesData.map(async (imageData, index) => {
     const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
     
-    // Заголовок документа
+    // Заголовок документа (3 строки)
     worksheet.getCell('A1').value = `Документ №: ${documentNumber || 'Без номера'}`;
     worksheet.getCell('A2').value = `Дата: ${formatDate(new Date())}`;
     worksheet.getCell('A3').value = `Изображение: ${imageData.name}`;
 
-    // Рисуем изображение с маркерами
+    // Создаем изображение с маркерами
     const imgWithMarks = await new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -662,7 +666,7 @@ const exportToExcel = async () => {
         imageData.boardMarks.forEach(mark => {
           const log = imageData.logs.find(l => l.id === mark.logId);
           if (log) {
-            const markSize = (imageData.markerSize || globalMarkerSize) * window.devicePixelRatio;
+            const markSize = (imageData.markerSize || globalMarkerSize) * 2;
             tempCtx.beginPath();
             tempCtx.arc(mark.x, mark.y, markSize, 0, 2 * Math.PI);
             tempCtx.fillStyle = log.color;
@@ -685,27 +689,46 @@ const exportToExcel = async () => {
       base64: imgWithMarks.split(',')[1],
       extension: 'png',
     });
-    
-    worksheet.addImage(imageId, {
-      tl: { col: 1, row: 4 },
-      ext: { width: 500, height: 300 }
+
+    // Получаем размеры изображения
+    const img = new Image();
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.src = imageData.image;
     });
 
-    // Таблица с информацией о досках (начинаем с 35 строки)
-    const startRow = 35;
-    
-    // Заголовки таблицы (добавили колонку с цветом)
-    worksheet.getCell(`A${startRow}`).value = 'Размер доски';
-    worksheet.getCell(`B${startRow}`).value = 'Количество';
-    worksheet.getCell(`C${startRow}`).value = 'Цвет маркера';
+    // Рассчитываем количество строк, которые займет изображение
+    const imageRowSpan = Math.ceil(img.naturalHeight / EXCEL_ROW_HEIGHT);
+    // Рассчитываем количество колонок, которые займет изображение
+    const imageColSpan = Math.ceil(img.naturalWidth / EXCEL_COLUMN_WIDTH);
+
+    // Вставляем изображение, начиная с 4 строки (после заголовка)
+    worksheet.addImage(imageId, {
+      tl: { col: 1, row: 4 }, // Верхний левый угол (колонка 1, строка 4)
+      br: { col: 1 + imageColSpan, row: 4 + imageRowSpan } // Нижний правый угол
+    });
+
+    // Настраиваем ширину колонок и высоту строк для изображения
+    worksheet.getColumn(1).width = imageColSpan * 8;
+    for (let i = 4; i < 4 + imageRowSpan; i++) {
+      worksheet.getRow(i).height = EXCEL_ROW_HEIGHT;
+    }
+
+    // Позиция для таблицы с данными (после изображения + 2 пустые строки)
+    const tableStartRow = 4 + imageRowSpan + 2;
+
+    // Заголовки таблицы
+    worksheet.getCell(`A${tableStartRow}`).value = 'Размер доски';
+    worksheet.getCell(`B${tableStartRow}`).value = 'Количество';
+    worksheet.getCell(`C${tableStartRow}`).value = 'Цвет маркера';
     
     // Стили для заголовков
     ['A', 'B', 'C'].forEach(col => {
-      const cell = worksheet.getCell(`${col}${startRow}`);
+      const cell = worksheet.getCell(`${col}${tableStartRow}`);
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF196C2F' } // Зеленый фон как в приложении
+        fgColor: { argb: 'FF196C2F' }
       };
       cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
       cell.alignment = { horizontal: 'center' };
@@ -716,7 +739,7 @@ const exportToExcel = async () => {
     imageData.boardMarks.forEach(mark => {
       const log = imageData.logs.find(l => l.id === mark.logId);
       if (log) {
-        const key = `${log.width}x${log.height}`;
+        const key = `${log.width}x${log.height}x${log.length}`;
         if (!logStats[key]) {
           logStats[key] = {
             count: 0,
@@ -728,11 +751,11 @@ const exportToExcel = async () => {
     });
 
     // Заполняем таблицу
-    let row = startRow + 1;
+    let row = tableStartRow + 1;
     Object.entries(logStats).forEach(([size, data]) => {
       worksheet.getCell(`A${row}`).value = size;
       
-      // Ячейка с цветом (заливаем цветом маркера)
+      // Ячейка с цветом
       const colorCell = worksheet.getCell(`C${row}`);
       colorCell.fill = {
         type: 'pattern',
@@ -744,7 +767,7 @@ const exportToExcel = async () => {
       row++;
     });
 
-    // Автонастройка ширины столбцов
+    // Автонастройка ширины столбцов для таблицы
     worksheet.columns = [
       { key: 'size', width: 20 },
       { key: 'color', width: 20 },
@@ -759,11 +782,12 @@ const exportToExcel = async () => {
   const fileName = `Учет досок_${documentNumber}_${currentDate}.xlsx`;
   saveAs(new Blob([buffer]), fileName);
 
-  // Полная очистка всех данных после экспорта
+  // Очистка данных
   setImagesData([]);
   setCurrentImageId(null);
   setWidth('');
   setHeight('');
+  setLength(''); 
   setColor(colorPalette.accent);
   setSelectedLog(null);
   setDocumentNumber('');
@@ -835,6 +859,7 @@ useEffect(() => {
     currentImageId,
     width,
     height,
+    length,
     color,
     selectedLog,
     globalMarkerSize,
@@ -868,6 +893,7 @@ useEffect(() => {
       setCurrentImageId(parsedState.currentImageId || null);
       setWidth(parsedState.width || '');
       setHeight(parsedState.height || '');
+      setLength(parsedState.length || '');
       setColor(parsedState.color || colorPalette.accent);
       setSelectedLog(parsedState.selectedLog || null);
       setGlobalMarkerSize(parsedState.globalMarkerSize || (isMobile ? 40 : 20));
@@ -1021,7 +1047,7 @@ const renderFormsSection = () => (
     <div style={styles.section}>
       <h4 style={{ color: colorPalette.primary }}>Добавить размер</h4>
       <Row className="g-2">
-        <Col sm={4}>
+        <Col sm={3}>
           <Form.Group controlId="formWidth" className="mb-3">
             <Form.Label>Ширина (мм)</Form.Label>
             <Form.Control 
@@ -1032,7 +1058,7 @@ const renderFormsSection = () => (
             />
           </Form.Group>
         </Col>
-        <Col sm={4}>
+        <Col sm={3}>
           <Form.Group controlId="formHeight" className="mb-3">
             <Form.Label>Высота (мм)</Form.Label>
             <Form.Control 
@@ -1043,11 +1069,22 @@ const renderFormsSection = () => (
             />
           </Form.Group>
         </Col>
-        <Col sm={4} className="d-flex align-items-end mb-3">
+        <Col sm={3}>
+          <Form.Group controlId="formLength" className="mb-3">
+            <Form.Label>Длина (м)</Form.Label>
+            <Form.Control 
+              type="number" 
+              value={length} 
+              onChange={(e) => setLength(e.target.value)}
+              style={styles.input}
+            />
+          </Form.Group>
+        </Col>
+        <Col sm={3} className="d-flex align-items-end mb-3">
           <Button 
             style={styles.buttonPrimary}
             onClick={addLog} 
-            disabled={!width || !height}
+            disabled={!width || !height || !length}
             className="hover-scale"
           >
             Добавить
@@ -1239,7 +1276,7 @@ const renderImageSection = () => (
                               borderColor: colorPalette.border,
                               fontWeight: selectedLog?.id === log.id ? 'bold' : 'normal'
                             }}>
-                              {log.width}x{log.height} мм
+                              {log.width}x{log.height}x{log.length} мм
                             </td>
                             <td style={{ padding: '8px', borderColor: colorPalette.border }}>
                               <div 
@@ -1305,8 +1342,9 @@ const renderImageSection = () => (
                 display: 'block',
                 width: '100%',
                 height: 'auto',
-                maxHeight: '80vh',
-                imageRendering: 'pixelated'
+                maxWidth: '100%',
+                imageRendering: 'pixelated',
+                cursor: isDragging ? 'grabbing' : 'pointer'
               }}
             />
           </div>
@@ -1407,7 +1445,7 @@ const renderImageSection = () => (
                   if (count === 0) return null;
                   return (
                     <tr key={log.id} style={styles.tableRow}>
-                      <td>{log.width}x{log.height} мм</td>
+                      <td>{log.width}x{log.height}x{log.length} мм</td>
                       <td>
                         <div 
                           style={{
