@@ -204,49 +204,67 @@ function App() {
       setCurrentImageId(null);
     }
   };
+const deleteMark = (clickedMark, imageId) => {
+  setImagesData(prev => prev.map(data => {
+    if (data.id !== imageId) return data;
 
-  const deleteMark = (clickedMark, imageId) => {
-    setImagesData(prev => prev.map(data => {
-      if (data.id !== imageId) return data;
+    // Фильтруем удаляемый маркер
+    const filteredMarks = data.boardMarks.filter(mark => mark.id !== clickedMark.id);
+    
+    // Пересчитываем номера маркеров для того же logId
+    const marksForLog = filteredMarks.filter(mark => mark.logId === clickedMark.logId)
+      .sort((a, b) => a.number - b.number)
+      .map((mark, index) => ({
+        ...mark,
+        number: index + 1
+      }));
+    
+    // Сохраняем маркеры с другими logId без изменений
+    const otherMarks = filteredMarks.filter(mark => mark.logId !== clickedMark.logId);
+    
+    return { 
+      ...data, 
+      boardMarks: [...otherMarks, ...marksForLog] 
+    };
+  }));
+};
 
-      const filteredMarks = data.boardMarks.filter(mark => mark.id !== clickedMark.id);
-      return { ...data, boardMarks: filteredMarks };
-    }));
-  };
+const processClick = (imageX, imageY, imageId) => {
+  const currentImageData = imagesData.find(data => data.id === imageId);
+  if (!currentImageData || !currentImageData.image) return;
 
-  const processClick = (imageX, imageY, imageId) => {
-    const currentImageData = imagesData.find(data => data.id === imageId);
-    if (!currentImageData || !currentImageData.image) return;
+  const clickRadius = (currentImageData.markerSize || globalMarkerSize) * 1.2;
 
-    const clickRadius = (currentImageData.markerSize || globalMarkerSize) * 1.2;
+  const clickedMark = currentImageData.boardMarks.find((mark) => {
+    const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
+    return distance <= clickRadius;
+  });
 
-    const clickedMark = currentImageData.boardMarks.find((mark) => {
-      const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
-      return distance <= clickRadius;
-    });
+  if (clickedMark) {
+    deleteMark(clickedMark, imageId);
+    return;
+  }
 
-    if (clickedMark) {
-      deleteMark(clickedMark, imageId);
-      return;
-    }
+  if (selectedLog) {
+    // Получаем текущее количество маркеров для этого logId
+    const marksForLog = currentImageData.boardMarks.filter(m => m.logId === selectedLog.id);
+    
+    const newMark = {
+      id: Date.now(),
+      x: imageX,
+      y: imageY,
+      logId: selectedLog.id,
+      color: selectedLog.color,
+      number: marksForLog.length + 1, // Используем длину отфильтрованного массива
+    };
 
-    if (selectedLog) {
-      const newMark = {
-        id: Date.now(),
-        x: imageX,
-        y: imageY,
-        logId: selectedLog.id,
-        color: selectedLog.color,
-        number: currentImageData.boardMarks.filter(m => m.logId === selectedLog.id).length + 1,
-      };
-
-      setImagesData(prev => prev.map(data =>
-        data.id === imageId
-          ? { ...data, boardMarks: [...data.boardMarks, newMark] }
-          : data
-      ));
-    }
-  };
+    setImagesData(prev => prev.map(data =>
+      data.id === imageId
+        ? { ...data, boardMarks: [...data.boardMarks, newMark] }
+        : data
+    ));
+  }
+};
 
   const handleDesktopClick = (e, imageId) => {
     if (!imageId || !isClick || isDragging) return;
