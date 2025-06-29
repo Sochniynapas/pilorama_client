@@ -43,6 +43,8 @@ function App() {
   const [expandedImages, setExpandedImages] = useState(true);
   const [logsPanelOpen, setLogsPanelOpen] = useState(true);
   const [showMarkerPreview, setShowMarkerPreview] = useState(false);
+  const [documentDate, setDocumentDate] = useState(new Date());
+  
 
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -554,11 +556,11 @@ const processClick = (imageX, imageY, imageId) => {
     ctx.fillText(number.toString(), x, y);
   };
 
-  const formatDate = (date) => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${day}.${month}.${date.getFullYear()}`;
-  };
+const formatDate = (date) => {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `${day}.${month}.${date.getFullYear()}`;
+};
 
  const exportToExcel = async () => {
   if (imagesData.length === 0) {
@@ -566,6 +568,7 @@ const processClick = (imageX, imageY, imageId) => {
     return;
   }
 
+  
   const workbook = new ExcelJS.Workbook();
   const tempCanvas = document.createElement('canvas');
   const tempCtx = tempCanvas.getContext('2d');
@@ -585,32 +588,59 @@ const processClick = (imageX, imageY, imageId) => {
     }
   };
 
+  // Создаем лист со сводкой
+  const formattedDate = formatDate(documentDate);
+
   const summarySheet = workbook.addWorksheet('Сводка');
   summarySheet.getCell('A1').value = `Документ №: ${documentNumber || 'Без номера'}`;
-  summarySheet.getCell('A2').value = `Дата: ${formatDate(new Date())}`;
+  summarySheet.getCell('A2').value = `Дата: ${formattedDate}`;
+  
+  // Сводная таблица по изображениям
   summarySheet.getCell('A4').value = 'Изображение';
   summarySheet.getCell('B4').value = 'Размер доски';
   summarySheet.getCell('C4').value = 'Количество';
   summarySheet.getCell('D4').value = 'Цвет маркера';
   
-  ['A', 'B', 'C', 'D'].forEach(col => {
+  // Общая сводная таблица по всем размерам
+  summarySheet.getCell('F4').value = 'Общий итог';
+  summarySheet.getCell('F5').value = 'Размер доски';
+  summarySheet.getCell('G5').value = 'Общее количество';
+  summarySheet.getCell('H5').value = 'Цвет маркера';
+
+  // Стили для заголовков
+  ['A', 'B', 'C', 'D', 'F', 'G', 'H'].forEach(col => {
     const cell = summarySheet.getCell(`${col}4`);
+    if (col <= 'D' || col >= 'F') {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF196C2F' }
+      };
+      cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+      cell.alignment = { horizontal: 'center' };
+    }
+  });
+
+  // Стили для подзаголовков общей таблицы
+  ['F', 'G', 'H'].forEach(col => {
+    const cell = summarySheet.getCell(`${col}5`);
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF196C2F' }
+      fgColor: { argb: 'FF4C8C6C' }
     };
     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
     cell.alignment = { horizontal: 'center' };
   });
 
   const summaryData = {};
+  const globalSummary = {}; // Для общей сводки по всем размерам
   let globalTotalCount = 0;
 
   const imagePromises = imagesData.map(async (imageData, index) => {
     const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
     worksheet.getCell('A1').value = `Документ №: ${documentNumber || 'Без номера'}`;
-    worksheet.getCell('A2').value = `Дата: ${formatDate(new Date())}`;
+    worksheet.getCell('A2').value = `Дата: ${userDate}`;
     worksheet.getCell('A3').value = `Изображение: ${imageData.name}`;
 
     const logStats = {};
@@ -641,6 +671,15 @@ const processClick = (imageX, imageY, imageId) => {
         }
         summaryData[summaryKey].count++;
         globalTotalCount++;
+        
+        // Заполняем общую сводку
+        if (!globalSummary[key]) {
+          globalSummary[key] = {
+            count: 0,
+            color: log.color
+          };
+        }
+        globalSummary[key].count++;
       }
     });
 
@@ -741,6 +780,7 @@ const processClick = (imageX, imageY, imageId) => {
 
   await Promise.all(imagePromises);
   
+  // Заполняем таблицу по изображениям
   let summaryRow = 5;
   Object.values(summaryData).forEach(item => {
     summarySheet.getCell(`A${summaryRow}`).value = item.imageName;
@@ -760,16 +800,40 @@ const processClick = (imageX, imageY, imageId) => {
   summarySheet.getCell(`C${summaryRow}`).font = { bold: true };
   addBorders(summarySheet, 4, summaryRow, 1, 4);
 
+  // Заполняем общую сводную таблицу
+  let globalSummaryRow = 6;
+  Object.entries(globalSummary).forEach(([size, data]) => {
+    summarySheet.getCell(`F${globalSummaryRow}`).value = size;
+    summarySheet.getCell(`G${globalSummaryRow}`).value = data.count;
+    const colorCell = summarySheet.getCell(`H${globalSummaryRow}`);
+    colorCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: data.color.replace('#', 'FF') }
+    };
+    globalSummaryRow++;
+  });
+
+  // Итог для общей таблицы
+  summarySheet.getCell(`F${globalSummaryRow}`).value = 'Всего:';
+  summarySheet.getCell(`G${globalSummaryRow}`).value = globalTotalCount;
+  summarySheet.getCell(`G${globalSummaryRow}`).font = { bold: true };
+  addBorders(summarySheet, 5, globalSummaryRow, 6, 8);
+
+  // Настраиваем ширину столбцов
   summarySheet.columns = [
     { key: 'image', width: 25 },
     { key: 'size', width: 18 },
     { key: 'count', width: 15 },
-    { key: 'color', width: 15 }
+    { key: 'color', width: 15 },
+    { key: 'empty', width: 5 }, // Пустой столбец для разделения
+    { key: 'globalSize', width: 18 },
+    { key: 'globalCount', width: 15 },
+    { key: 'globalColor', width: 15 }
   ];
 
   const buffer = await workbook.xlsx.writeBuffer();
-  const currentDate = formatDate(new Date());
-  const fileName = `Учет досок_${documentNumber}_${currentDate}.xlsx`;
+  const fileName = `Учет досок_${documentNumber}_${formattedDate.replace(/\./g, '-')}.xlsx`;
   saveAs(new Blob([buffer]), fileName);
 
   // Очистка данных после успешного экспорта
@@ -1110,16 +1174,31 @@ const processClick = (imageX, imageY, imageId) => {
 
       <div style={styles.section}>
         <h4 style={{ color: colorPalette.primary }}>Экспорт в Excel</h4>
-        <Form.Group controlId="formDocNumber" className="mb-3">
-          <Form.Label>Номер документа</Form.Label>
-          <Form.Control 
-            type="text" 
-            value={documentNumber}
-            onChange={(e) => setDocumentNumber(e.target.value)}
-            placeholder="Введите номер документа"
-            style={styles.input}
-          />
-        </Form.Group>
+        <Row className="g-2 mb-3">
+          <Col sm={6}>
+            <Form.Group controlId="formDocNumber">
+              <Form.Label>Номер документа</Form.Label>
+              <Form.Control 
+                type="text" 
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value)}
+                placeholder="Введите номер документа"
+                style={styles.input}
+              />
+            </Form.Group>
+          </Col>
+          <Col sm={6}>
+            <Form.Group controlId="formDocDate">
+              <Form.Label>Дата документа</Form.Label>
+              <Form.Control 
+                type="date" 
+                value={documentDate.toISOString().split('T')[0]}
+                onChange={(e) => setDocumentDate(new Date(e.target.value))}
+                style={styles.input}
+              />
+            </Form.Group>
+          </Col>
+        </Row>
         <Button 
           style={styles.buttonPrimary}
           onClick={exportToExcel}
