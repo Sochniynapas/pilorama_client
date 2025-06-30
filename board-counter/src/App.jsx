@@ -640,7 +640,7 @@ const formatDate = (date) => {
   const imagePromises = imagesData.map(async (imageData, index) => {
     const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
     worksheet.getCell('A1').value = `Документ №: ${documentNumber || 'Без номера'}`;
-    worksheet.getCell('A2').value = `Дата: ${userDate}`;
+    worksheet.getCell('A2').value = `Дата: ${formattedDate}`;
     worksheet.getCell('A3').value = `Изображение: ${imageData.name}`;
 
     const logStats = {};
