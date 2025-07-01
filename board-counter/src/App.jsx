@@ -916,7 +916,7 @@ const exportToExcel = async () => {
           extension: 'png',
         });
 
-        // Рассчитываем размеры изображения для диапазона 11-54 строк
+        // Рассчитываем размеры изображения для диапазона 11-54 строки
         const availableRows = imageEndRow;
         const rowHeight = 15; // Высота строки в пунктах
         const maxHeightInPoints = availableRows * rowHeight;
