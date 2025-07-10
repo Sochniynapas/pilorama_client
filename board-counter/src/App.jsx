@@ -196,6 +196,7 @@ const handleImageUpload = (e) => {
       file,
       boardMarks: [],
       name: `Фото ${imagesData.length + index + 1}`,
+      plans: {},
       markerSize: globalMarkerSize,
       loaded: false // Флаг загрузки
     };
@@ -203,7 +204,19 @@ const handleImageUpload = (e) => {
 
   setImagesData(prev => [...prev, ...newImages]);
 };
-
+const updateImagePlan = (imageId, logId, value) => {
+  setImagesData(prev => prev.map(image => 
+    image.id === imageId 
+      ? { 
+          ...image, 
+          plans: {
+            ...image.plans,
+            [logId]: value === '' ? undefined : parseInt(value) || 0
+          }
+        } 
+      : image
+  ));
+};
 const deleteImage = (imageId, e) => {
   e.stopPropagation();
   const imageToDelete = imagesData.find(img => img.id === imageId);
@@ -705,7 +718,7 @@ const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const formattedDate = formatDate(documentDate);
 
-    // Стили для таблиц (остаются без изменений)
+    // Стили с полным центрированием
     const headerStyle = {
       fill: {
         type: 'pattern',
@@ -719,7 +732,7 @@ const exportToExcel = async () => {
       },
       alignment: { 
         horizontal: 'center',
-        vertical: 'middle',
+        vertical: 'center',
         wrapText: true
       },
       border: {
@@ -730,7 +743,7 @@ const exportToExcel = async () => {
       }
     };
 
-    const cellStyle = {
+    const centeredCellStyle = {
       border: {
         top: { style: 'thin', color: { argb: 'FF000000' } },
         left: { style: 'thin', color: { argb: 'FF000000' } },
@@ -738,64 +751,58 @@ const exportToExcel = async () => {
         right: { style: 'thin', color: { argb: 'FF000000' } }
       },
       alignment: {
-        vertical: 'middle',
+        horizontal: 'center',
+        vertical: 'center',
         wrapText: true
       }
     };
 
-    // 1. Создаем лист со сводкой (остается без изменений)
+    // 1. Создаем лист со сводкой
     const summarySheet = workbook.addWorksheet('Сводка');
     
     // Заголовки документа
-    summarySheet.mergeCells('A1:D1');
+    summarySheet.mergeCells('A1:E1');
     summarySheet.getCell('A1').value = `Документ №: ${documentNumber}`;
     summarySheet.getCell('A2').value = `Дата: ${formattedDate}`;
     
     // Стили для заголовков
     summarySheet.getCell('A1').font = { bold: true, size: 14 };
+    summarySheet.getCell('A1').alignment = { horizontal: 'center' };
     summarySheet.getCell('A2').font = { bold: true };
 
-    // 2. Сводная таблица по изображениям
-    summarySheet.getCell('A4').value = 'Изображение';
-    summarySheet.getCell('B4').value = 'Размер доски';
-    summarySheet.getCell('C4').value = 'Количество';
-    summarySheet.getCell('D4').value = 'Цвет маркера';
-    
-    // Применяем стили к заголовкам
-    ['A4', 'B4', 'C4', 'D4'].forEach(cellAddress => {
-      Object.assign(summarySheet.getCell(cellAddress), headerStyle);
-    });
-
-    // 3. Собираем статистику
+    // 2. Собираем статистику
     const summaryData = {};
     const globalSummary = {};
     let globalTotalCount = 0;
+    let globalPlanCount = 0;
 
     // Обрабатываем каждое изображение
     for (const [index, imageData] of imagesData.entries()) {
       const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
       
       // Настройки листа
-      worksheet.properties.defaultColWidth = 20;
+      worksheet.properties.defaultColWidth = 15;
       worksheet.views = [{
         state: 'frozen',
-        ySplit: 4 // Замораживаем первые 4 строки
+        ySplit: 4
       }];
       
       // Заголовки
-      worksheet.mergeCells('A1:D1');
+      worksheet.mergeCells('A1:E1');
       worksheet.getCell('A1').value = `Документ №: ${documentNumber}`;
       worksheet.getCell('A2').value = `Дата: ${formattedDate}`;
       worksheet.getCell('A3').value = `Изображение: ${imageData.name}`;
       
       // Стили для заголовков
       worksheet.getCell('A1').font = { bold: true, size: 14 };
+      worksheet.getCell('A1').alignment = { horizontal: 'center' };
       worksheet.getCell('A2').font = { bold: true };
       worksheet.getCell('A3').font = { bold: true };
 
       // Статистика по доскам
       const logStats = {};
       let imageTotalCount = 0;
+      let imagePlanCount = 0;
       
       imageData.boardMarks.forEach(mark => {
         const log = logs.find(l => l.id === mark.logId);
@@ -803,7 +810,11 @@ const exportToExcel = async () => {
           const key = `${log.width}x${log.height}x${log.length}`;
           
           if (!logStats[key]) {
-            logStats[key] = { count: 0, color: log.color };
+            logStats[key] = { 
+              count: 0, 
+              color: log.color,
+              plan: imageData.plans?.[log.id] || 0
+            };
           }
           logStats[key].count++;
           imageTotalCount++;
@@ -814,30 +825,75 @@ const exportToExcel = async () => {
               imageName: imageData.name,
               size: key,
               count: 0,
-              color: log.color
+              color: log.color,
+              plan: imageData.plans?.[log.id] || 0
             };
           }
           summaryData[summaryKey].count++;
           globalTotalCount++;
           
           if (!globalSummary[key]) {
-            globalSummary[key] = { count: 0, color: log.color };
+            globalSummary[key] = { 
+              count: 0, 
+              color: log.color,
+              plan: 0
+            };
           }
           globalSummary[key].count++;
         }
       });
 
-      // 4. Таблица с данными
+      // Добавляем планы для досок, которые есть в плане, но не отмечены на фото
+      logs.forEach(log => {
+        const key = `${log.width}x${log.height}x${log.length}`;
+        const planValue = imageData.plans?.[log.id] || 0;
+        
+        if (planValue > 0) {
+          if (!logStats[key]) {
+            logStats[key] = {
+              count: 0,
+              color: log.color,
+              plan: planValue
+            };
+          }
+          
+          imagePlanCount += planValue;
+          
+          if (!globalSummary[key]) {
+            globalSummary[key] = {
+              count: 0,
+              color: log.color,
+              plan: 0
+            };
+          }
+          
+          const summaryKey = `${imageData.name}|${key}`;
+          if (!summaryData[summaryKey]) {
+            summaryData[summaryKey] = {
+              imageName: imageData.name,
+              size: key,
+              count: 0,
+              color: log.color,
+              plan: planValue
+            };
+          }
+        }
+      });
+
+      // Таблица с данными
       let tableRow = 5;
       
       // Заголовки таблицы
       worksheet.getCell(`A${tableRow}`).value = 'Размер доски';
-      worksheet.getCell(`B${tableRow}`).value = 'Количество';
-      worksheet.getCell(`C${tableRow}`).value = 'Цвет';
+      worksheet.getCell(`B${tableRow}`).value = 'План';
+      worksheet.getCell(`C${tableRow}`).value = 'Факт';
+      worksheet.getCell(`D${tableRow}`).value = 'Отклонение';
+      worksheet.getCell(`E${tableRow}`).value = 'Цвет';
       
       // Стили для заголовков
-      ['A', 'B', 'C'].forEach(col => {
-        Object.assign(worksheet.getCell(`${col}${tableRow}`), headerStyle);
+      ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+        const cell = worksheet.getCell(`${col}${tableRow}`);
+        Object.assign(cell, headerStyle);
       });
 
       tableRow++;
@@ -845,20 +901,38 @@ const exportToExcel = async () => {
       // Данные таблицы
       Object.entries(logStats).forEach(([size, data]) => {
         worksheet.getCell(`A${tableRow}`).value = size;
-        worksheet.getCell(`B${tableRow}`).value = data.count;
+        worksheet.getCell(`B${tableRow}`).value = data.plan;
+        worksheet.getCell(`C${tableRow}`).value = data.count;
+        worksheet.getCell(`D${tableRow}`).value = data.count - data.plan;
+        
+        // Подсветка ячейки отклонения
+        const deviationCell = worksheet.getCell(`D${tableRow}`);
+        if (data.count > data.plan) {
+          deviationCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFCCCC' }
+          };
+        } else if (data.count < data.plan) {
+          deviationCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFCCFFCC' }
+          };
+        }
         
         // Ячейка с цветом
-        const colorCell = worksheet.getCell(`C${tableRow}`);
+        const colorCell = worksheet.getCell(`E${tableRow}`);
         colorCell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: data.color.replace('#', 'FF') }
         };
-        Object.assign(colorCell, cellStyle);
         
-        // Стили для остальных ячеек
-        ['A', 'B'].forEach(col => {
-          Object.assign(worksheet.getCell(`${col}${tableRow}`), cellStyle);
+        // Стили для всех ячеек
+        ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+          const cell = worksheet.getCell(`${col}${tableRow}`);
+          Object.assign(cell, centeredCellStyle);
         });
         
         tableRow++;
@@ -866,33 +940,52 @@ const exportToExcel = async () => {
 
       // Итоговая строка
       worksheet.getCell(`A${tableRow}`).value = 'Всего:';
-      worksheet.getCell(`B${tableRow}`).value = imageTotalCount;
+      worksheet.getCell(`B${tableRow}`).value = imagePlanCount;
+      worksheet.getCell(`C${tableRow}`).value = imageTotalCount;
+      worksheet.getCell(`D${tableRow}`).value = imageTotalCount - imagePlanCount;
+      
+      // Подсветка итоговой ячейки отклонения
+      const totalDeviationCell = worksheet.getCell(`D${tableRow}`);
+      if (imageTotalCount > imagePlanCount) {
+        totalDeviationCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFCCCC' }
+        };
+      } else if (imageTotalCount < imagePlanCount) {
+        totalDeviationCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFCCFFCC' }
+        };
+      }
+      
       worksheet.getCell(`B${tableRow}`).font = { bold: true };
-      ['A', 'B', 'C'].forEach(col => {
-        Object.assign(worksheet.getCell(`${col}${tableRow}`), cellStyle);
+      worksheet.getCell(`C${tableRow}`).font = { bold: true };
+      worksheet.getCell(`D${tableRow}`).font = { bold: true };
+      ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+        const cell = worksheet.getCell(`${col}${tableRow}`);
+        Object.assign(cell, centeredCellStyle);
       });
 
-      const imageStartRow = 11; // Фиксированная начальная строка
-      const imageEndRow = 54;   // Фиксированная конечная строка
+      // Добавление изображения (восстановленная версия)
+      const imageStartRow = 11;
+      const imageEndRow = 54;
       
       try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Загружаем изображение
         const img = await new Promise((resolve, reject) => {
           const img = new Image();
           img.onload = () => resolve(img);
           img.onerror = reject;
           img.src = imageData.image;
         });
-        
-        // Устанавливаем размеры canvas
+
+        const canvas = document.createElement('canvas');
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        
-        // Рисуем маркеры
+
         imageData.boardMarks.forEach(mark => {
           const log = logs.find(l => l.id === mark.logId);
           if (log) {
@@ -908,40 +1001,34 @@ const exportToExcel = async () => {
             ctx.fillText(mark.number.toString(), mark.x, mark.y);
           }
         });
-        
-        // Конвертируем в base64
+
         const imageBase64 = canvas.toDataURL('image/png').split(',')[1];
         const imageId = workbook.addImage({
           base64: imageBase64,
           extension: 'png',
         });
 
-        // Рассчитываем размеры изображения для диапазона 11-54 строки
         const availableRows = imageEndRow;
-        const rowHeight = 15; // Высота строки в пунктах
+        const rowHeight = 15;
         const maxHeightInPoints = availableRows * rowHeight;
         
-        // Рассчитываем пропорциональную ширину
         const scaleFactor = maxHeightInPoints / img.naturalHeight;
         const desiredWidthInPoints = img.naturalWidth * scaleFactor;
         const desiredHeightInPoints = maxHeightInPoints;
 
-        // Добавляем изображение
         worksheet.addImage(imageId, {
-          tl: { col: 0, row: imageStartRow }, // Первая колонка
+          tl: { col: 0, row: imageStartRow },
           ext: { 
             width: desiredWidthInPoints, 
             height: desiredHeightInPoints 
           }
         });
 
-        // Настраиваем высоту строк
         for (let i = imageStartRow; i < imageEndRow; i++) {
           const row = worksheet.getRow(i + 1);
           row.height = rowHeight;
         }
 
-        // Устанавливаем ширину колонок
         const colWidth = 10;
         const colsNeeded = Math.ceil(desiredWidthInPoints / (colWidth * 7));
         for (let i = 1; i <= colsNeeded; i++) {
@@ -951,27 +1038,162 @@ const exportToExcel = async () => {
       } catch (error) {
         console.error('Ошибка при обработке изображения:', error);
         worksheet.getCell(`A${imageStartRow}`).value = 'Не удалось загрузить изображение';
-        Object.assign(worksheet.getCell(`A${imageStartRow}`), cellStyle);
+        Object.assign(worksheet.getCell(`A${imageStartRow}`), centeredCellStyle);
       }
     }
 
-    // Остальной код (сводные таблицы и экспорт) остается без изменений
-    // 6. Заполняем сводную таблицу
-    let summaryRow = 5;
+    // 3. Общая сводка (первая таблица)
+    summarySheet.getCell('A4').value = 'Общий итог';
+    summarySheet.mergeCells('A4:E4');
+    summarySheet.getCell('A5').value = 'Размер доски';
+    summarySheet.getCell('B5').value = 'План';
+    summarySheet.getCell('C5').value = 'Факт';
+    summarySheet.getCell('D5').value = 'Отклонение';
+    summarySheet.getCell('E5').value = 'Цвет';
+
+    // Стили для заголовков
+    ['A4', 'B4', 'C4', 'D4', 'E4'].forEach(cellAddress => {
+      const cell = summarySheet.getCell(cellAddress);
+      Object.assign(cell, headerStyle);
+    });
+
+    // Собираем планы для каждого размера доски
+    logs.forEach(log => {
+      const key = `${log.width}x${log.height}x${log.length}`;
+      if (!globalSummary[key]) {
+        globalSummary[key] = {
+          count: 0,
+          color: log.color,
+          plan: 0
+        };
+      }
+      
+      imagesData.forEach(imageData => {
+        const planValue = imageData.plans?.[log.id] || 0;
+        globalSummary[key].plan += planValue;
+        globalPlanCount += planValue;
+      });
+    });
+
+    let globalSummaryRow = 6;
+    Object.entries(globalSummary).forEach(([size, data]) => {
+      summarySheet.getCell(`A${globalSummaryRow}`).value = size;
+      summarySheet.getCell(`B${globalSummaryRow}`).value = data.plan;
+      summarySheet.getCell(`C${globalSummaryRow}`).value = data.count;
+      summarySheet.getCell(`D${globalSummaryRow}`).value = data.count - data.plan;
+      
+      // Подсветка ячейки отклонения
+      const deviationCell = summarySheet.getCell(`D${globalSummaryRow}`);
+      if (data.count > data.plan) {
+        deviationCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFCCCC' }
+        };
+      } else if (data.count < data.plan) {
+        deviationCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFCCFFCC' }
+        };
+      }
+      
+      // Ячейка с цветом
+      const colorCell = summarySheet.getCell(`E${globalSummaryRow}`);
+      colorCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: data.color.replace('#', 'FF') }
+      };
+      
+      ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+        const cell = summarySheet.getCell(`${col}${globalSummaryRow}`);
+        Object.assign(cell, centeredCellStyle);
+      });
+      
+      globalSummaryRow++;
+    });
+
+    // Итоговая строка
+    summarySheet.getCell(`A${globalSummaryRow}`).value = 'Всего:';
+    summarySheet.getCell(`B${globalSummaryRow}`).value = globalPlanCount;
+    summarySheet.getCell(`C${globalSummaryRow}`).value = globalTotalCount;
+    summarySheet.getCell(`D${globalSummaryRow}`).value = globalTotalCount - globalPlanCount;
+    
+    // Подсветка итоговой ячейки отклонения
+    const totalDeviationCell2 = summarySheet.getCell(`D${globalSummaryRow}`);
+    if (globalTotalCount > globalPlanCount) {
+      totalDeviationCell2.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFCCCC' }
+      };
+    } else if (globalTotalCount < globalPlanCount) {
+      totalDeviationCell2.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFCCFFCC' }
+      };
+    }
+    
+    summarySheet.getCell(`B${globalSummaryRow}`).font = { bold: true };
+    summarySheet.getCell(`C${globalSummaryRow}`).font = { bold: true };
+    summarySheet.getCell(`D${globalSummaryRow}`).font = { bold: true };
+    ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+      const cell = summarySheet.getCell(`${col}${globalSummaryRow}`);
+      Object.assign(cell, centeredCellStyle);
+    });
+
+    // 4. Сводная таблица по изображениям (вторая таблица)
+    const imageSummaryStartRow = globalSummaryRow + 2;
+    summarySheet.getCell(`A${imageSummaryStartRow}`).value = 'Изображение';
+    summarySheet.getCell(`B${imageSummaryStartRow}`).value = 'Размер доски';
+    summarySheet.getCell(`C${imageSummaryStartRow}`).value = 'План';
+    summarySheet.getCell(`D${imageSummaryStartRow}`).value = 'Факт';
+    summarySheet.getCell(`E${imageSummaryStartRow}`).value = 'Отклонение';
+    summarySheet.getCell(`F${imageSummaryStartRow}`).value = 'Цвет';
+    
+    // Применяем стили к заголовкам
+    ['A', 'B', 'C', 'D', 'E', 'F'].forEach(col => {
+      const cell = summarySheet.getCell(`${col}${imageSummaryStartRow}`);
+      Object.assign(cell, headerStyle);
+    });
+
+    let summaryRow = imageSummaryStartRow + 1;
     Object.values(summaryData).forEach(item => {
       summarySheet.getCell(`A${summaryRow}`).value = item.imageName;
       summarySheet.getCell(`B${summaryRow}`).value = item.size;
-      summarySheet.getCell(`C${summaryRow}`).value = item.count;
+      summarySheet.getCell(`C${summaryRow}`).value = item.plan;
+      summarySheet.getCell(`D${summaryRow}`).value = item.count;
+      summarySheet.getCell(`E${summaryRow}`).value = item.count - item.plan;
       
-      const colorCell = summarySheet.getCell(`D${summaryRow}`);
+      // Подсветка ячейки отклонения
+      const deviationCell = summarySheet.getCell(`E${summaryRow}`);
+      if (item.count > item.plan) {
+        deviationCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFCCCC' }
+        };
+      } else if (item.count < item.plan) {
+        deviationCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFCCFFCC' }
+        };
+      }
+      
+      // Ячейка с цветом
+      const colorCell = summarySheet.getCell(`F${summaryRow}`);
       colorCell.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: item.color.replace('#', 'FF') }
       };
       
-      ['A', 'B', 'C', 'D'].forEach(col => {
-        Object.assign(summarySheet.getCell(`${col}${summaryRow}`), cellStyle);
+      ['A', 'B', 'C', 'D', 'E', 'F'].forEach(col => {
+        const cell = summarySheet.getCell(`${col}${summaryRow}`);
+        Object.assign(cell, centeredCellStyle);
       });
       
       summaryRow++;
@@ -979,121 +1201,107 @@ const exportToExcel = async () => {
 
     // Итоговая строка
     summarySheet.getCell(`B${summaryRow}`).value = 'Всего:';
-    summarySheet.getCell(`C${summaryRow}`).value = globalTotalCount;
+    summarySheet.getCell(`C${summaryRow}`).value = Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0);
+    summarySheet.getCell(`D${summaryRow}`).value = globalTotalCount;
+    summarySheet.getCell(`E${summaryRow}`).value = globalTotalCount - Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0);
+    
+    // Подсветка итоговой ячейки отклонения
+    const totalDeviationCell = summarySheet.getCell(`E${summaryRow}`);
+    if (globalTotalCount > Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0)) {
+      totalDeviationCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFCCCC' }
+      };
+    } else if (globalTotalCount < Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0)) {
+      totalDeviationCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFCCFFCC' }
+      };
+    }
+    
     summarySheet.getCell(`C${summaryRow}`).font = { bold: true };
-    ['B', 'C'].forEach(col => {
-      Object.assign(summarySheet.getCell(`${col}${summaryRow}`), cellStyle);
+    summarySheet.getCell(`D${summaryRow}`).font = { bold: true };
+    summarySheet.getCell(`E${summaryRow}`).font = { bold: true };
+    ['B', 'C', 'D', 'E', 'F'].forEach(col => {
+      const cell = summarySheet.getCell(`${col}${summaryRow}`);
+      Object.assign(cell, centeredCellStyle);
     });
 
-    // 7. Общая сводка
-    summarySheet.getCell('F4').value = 'Общий итог';
-    summarySheet.getCell('F5').value = 'Размер доски';
-    summarySheet.getCell('G5').value = 'Общее количество';
-    summarySheet.getCell('H5').value = 'Цвет маркера';
-
-    // Стили для заголовков
-    ['F4', 'G4', 'H4'].forEach(cellAddress => {
-      const cell = summarySheet.getCell(cellAddress);
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF4C8C6C' }
-      };
-      cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-      cell.alignment = { horizontal: 'center' };
-      cell.border = headerStyle.border;
-    });
-
-    let globalSummaryRow = 6;
-    Object.entries(globalSummary).forEach(([size, data]) => {
-      summarySheet.getCell(`F${globalSummaryRow}`).value = size;
-      summarySheet.getCell(`G${globalSummaryRow}`).value = data.count;
-      
-      const colorCell = summarySheet.getCell(`H${globalSummaryRow}`);
-      colorCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: data.color.replace('#', 'FF') }
-      };
-      
-      ['F', 'G', 'H'].forEach(col => {
-        Object.assign(summarySheet.getCell(`${col}${globalSummaryRow}`), cellStyle);
-      });
-      
-      globalSummaryRow++;
-    });
-
-    // Итоговая строка
-    summarySheet.getCell(`F${globalSummaryRow}`).value = 'Всего:';
-    summarySheet.getCell(`G${globalSummaryRow}`).value = globalTotalCount;
-    summarySheet.getCell(`G${globalSummaryRow}`).font = { bold: true };
-    ['F', 'G', 'H'].forEach(col => {
-      Object.assign(summarySheet.getCell(`${col}${globalSummaryRow}`), cellStyle);
-    });
-
-    // 8. Настраиваем ширину столбцов
+    // 5. Настраиваем ширину колонок
     summarySheet.columns = [
-      { key: 'image', width: 25 },
-      { key: 'size', width: 20 },
-      { key: 'count', width: 15 },
-      { key: 'color', width: 15 },
-      { key: 'empty', width: 5 },
-      { key: 'globalSize', width: 20 },
-      { key: 'globalCount', width: 15 },
-      { key: 'globalColor', width: 15 }
+      { key: 'globalSize', width: 18 },  // Размер доски
+      { key: 'globalPlan', width: 10 },  // План
+      { key: 'globalFact', width: 10 },  // Факт
+      { key: 'globalDeviation', width: 10 },  // Отклонение
+      { key: 'globalColor', width: 8 },  // Цвет
+      { key: 'color', width: 8 },       // Разделитель
     ];
 
-    // 9. Генерируем и сохраняем файл
+    // 6. Гарантированное центрирование всех ячеек
+    for (let i = 1; i <= summarySheet.rowCount; i++) {
+      const row = summarySheet.getRow(i);
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        if (!cell.style?.alignment) {
+          cell.alignment = { horizontal: 'center', vertical: 'center' };
+        }
+      });
+    }
+
+    // 7. Генерируем и сохраняем файл
     const buffer = await workbook.xlsx.writeBuffer();
     const fileName = `Учет досок_${documentNumber}_${formattedDate.replace(/\./g, '-')}.xlsx`;
     saveAs(new Blob([buffer]), fileName);
 
-    // 10. Очищаем данные
-    const clearAllData = () => {
-      // Очистка blob URL
-      imagesData.forEach(img => {
-        if (img.image?.startsWith('blob:')) {
-          URL.revokeObjectURL(img.image);
-        }
-      });
-
-      // Очистка refs
-      Object.values(imageRefs.current).forEach(img => {
-        if (img.src?.startsWith('blob:')) {
-          URL.revokeObjectURL(img.src);
-        }
-      });
-      imageRefs.current = {};
-
-      // Сброс состояния
-      setImagesData([]);
-      setLogs([]);
-      setCurrentImageId(null);
-      setWidth('');
-      setHeight('');
-      setLength('');
-      setColor(colorPalette.accent);
-      setSelectedLog(null);
-      setGlobalMarkerSize(isMobile ? 40 : 20);
-      setZoomLevel(1);
-      setCanvasOffset({ x: 0, y: 0 });
-      setDocumentNumber('');
-
-      // Очистка поля ввода файлов
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-
-      // Очистка IndexedDB
-      set(STORAGE_KEY, null).catch(e => console.error("Ошибка очистки IndexedDB:", e));
-    };
-
+    // 8. Очищаем данные
     clearAllData();
 
   } catch (error) {
     console.error('Ошибка при экспорте в Excel:', error);
     alert('Произошла ошибка при создании Excel файла');
   }
+};
+
+// Функция для очистки всех данных
+const clearAllData = () => {
+  // Очистка blob URL
+  imagesData.forEach(img => {
+    if (img.image?.startsWith('blob:')) {
+      URL.revokeObjectURL(img.image);
+    }
+  });
+
+  // Очистка refs
+  Object.values(imageRefs.current).forEach(img => {
+    if (img.src?.startsWith('blob:')) {
+      URL.revokeObjectURL(img.src);
+    }
+  });
+  imageRefs.current = {};
+
+  // Сброс состояния
+  setImagesData([]);
+  setLogs([]);
+  setCurrentImageId(null);
+  setWidth('');
+  setHeight('');
+  setLength('');
+  setColor(colorPalette.accent);
+  setSelectedLog(null);
+  setGlobalMarkerSize(isMobile ? 40 : 20);
+  setZoomLevel(1);
+  setCanvasOffset({ x: 0, y: 0 });
+  setDocumentNumber('');
+  setDocumentDate(new Date());
+
+  // Очистка поля ввода файлов
+  if (fileInputRef.current) {
+    fileInputRef.current.value = '';
+  }
+
+  // Очистка IndexedDB
+  set(STORAGE_KEY, null).catch(e => console.error("Ошибка очистки IndexedDB:", e));
 };
 
   useEffect(() => {
@@ -1137,6 +1345,7 @@ useEffect(() => {
             ...img,
             fileData: fileData,
             image: null, // Не сохраняем URL, он временный
+            plans: img.plans || {}, // Сохраняем планы
             file: null   // Файл сохраняем в fileData
           };
         }
@@ -1742,7 +1951,9 @@ useEffect(() => {
                   <tr style={styles.tableHeader}>
                     <th>Размер</th>
                     <th>Цвет</th>
-                    <th>Количество</th>
+                    <th>План</th>
+                    <th>Факт</th>
+                    <th>Отклонение</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1750,7 +1961,14 @@ useEffect(() => {
                     const count = currentImageId 
                       ? imagesData.find(data => data.id === currentImageId)?.boardMarks.filter(mark => mark.logId === log.id).length 
                       : 0;
-                    if (count === 0) return null;
+                    
+                    // Skip if no marks and no plan for this log
+                    if (count === 0 && !imagesData.find(data => data.id === currentImageId)?.plans?.[log.id]) return null;
+                    
+                    const plan = imagesData.find(data => data.id === currentImageId)?.plans?.[log.id] ?? '';
+                    const deviation = count - (plan === '' ? 0 : plan);
+                    const deviationColor = deviation > 0 ? '#ffcccc' : deviation < 0 ? '#ccffcc' : 'transparent';
+                    
                     return (
                       <tr key={log.id} style={styles.tableRow}>
                         <td>{log.width}x{log.height}x{log.length} мм</td>
@@ -1767,7 +1985,23 @@ useEffect(() => {
                             }}
                           />
                         </td>
+                        <td>
+                          <Form.Control 
+                            type="number" 
+                            min="0"
+                            value={plan}
+                            onChange={(e) => updateImagePlan(currentImageId, log.id, e.target.value)}
+                            style={{ 
+                              width: '80px',
+                              border: `1px solid ${colorPalette.border}`,
+                              backgroundColor: 'white'
+                            }}
+                          />
+                        </td>
                         <td>{count}</td>
+                        <td style={{ backgroundColor: deviationColor }}>
+                          {deviation > 0 ? `+${deviation}` : deviation}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1775,7 +2009,18 @@ useEffect(() => {
                 <tfoot>
                   <tr style={{ backgroundColor: colorPalette.accentLight }}>
                     <td colSpan="2" className="text-end fw-bold">Всего:</td>
-                    <td className="fw-bold">{currentImageId ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length : 0}</td>
+                    <td className="fw-bold">
+                      {Object.values(imagesData.find(data => data.id === currentImageId)?.plans || {})
+                        .reduce((sum, plan) => sum + (plan || 0), 0)}
+                    </td>
+                    <td className="fw-bold">
+                      {currentImageId ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length || 0 : 0}
+                    </td>
+                    <td className="fw-bold">
+                      {(currentImageId ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length || 0 : 0) - 
+                      (Object.values(imagesData.find(data => data.id === currentImageId)?.plans || {}))
+                        .reduce((sum, plan) => sum + (plan || 0), 0)}
+                    </td>
                   </tr>
                 </tfoot>
               </Table>
