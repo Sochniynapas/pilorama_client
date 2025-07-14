@@ -1251,7 +1251,7 @@ const exportToExcel = async () => {
 
     // 7. Генерируем и сохраняем файл
     const buffer = await workbook.xlsx.writeBuffer();
-    const fileName = `${documentNumber}__${formattedDate.replace(/\./g, '-')}.xlsx`;
+    const fileName = `${documentNumber}_${formattedDate.replace(/\./g, '-')}.xlsx`;
     saveAs(new Blob([buffer]), fileName);
 
     // 8. Очищаем данные
