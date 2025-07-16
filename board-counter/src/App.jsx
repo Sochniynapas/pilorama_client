@@ -46,7 +46,6 @@ function App() {
   const [logsPanelOpen, setLogsPanelOpen] = useState(true);
   const [showMarkerPreview, setShowMarkerPreview] = useState(false);
   const [documentDate, setDocumentDate] = useState(new Date());
-  
 
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
@@ -58,16 +57,9 @@ function App() {
   const imageRefs = useRef({});
 
   const standardColors = [
-    '#8B0000', // Dark Red
-    '#006400', // Dark Green
-    '#00008B', // Dark Blue
-    '#808000', // Olive
-    '#800080', // Purple
-    '#008080', // Teal
-    '#FF8C00', // Dark Orange
-    '#4B0082', // Indigo
-    '#013220', // Dark Green 2
-    '#301934'  // Dark Purple
+    '#8B0000', '#006400', '#00008B', '#808000', 
+    '#800080', '#008080', '#FF8C00', '#4B0082', 
+    '#013220', '#301934'
   ];
 
   const styles = {
@@ -171,177 +163,173 @@ function App() {
     return () => window.removeEventListener('resize', checkIfMobile);
   }, []);
 
-const handleImageUpload = (e) => {
-  const files = Array.from(e.target.files);
-  if (files.length === 0) return;
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
-  const newImages = files.map((file, index) => {
-    const imageId = Date.now() + index;
-    const imageUrl = URL.createObjectURL(file);
-    
-    // Создаем и сохраняем Image объект
-    const img = new Image();
-    img.onload = () => {
-      // Обновляем состояние после загрузки изображения
-      setImagesData(prev => prev.map(imgData => 
-        imgData.id === imageId ? { ...imgData, loaded: true } : imgData
-      ));
-    };
-    img.src = imageUrl;
-    imageRefs.current[imageId] = img;
-    
-    return {
-      id: imageId,
-      image: imageUrl,
-      file,
-      boardMarks: [],
-      name: `Фото ${imagesData.length + index + 1}`,
-      plans: {},
-      markerSize: globalMarkerSize,
-      loaded: false // Флаг загрузки
-    };
-  });
+    const newImages = files.map((file, index) => {
+      const imageId = Date.now() + index;
+      const imageUrl = URL.createObjectURL(file);
+      
+      const img = new Image();
+      img.onload = () => {
+        setImagesData(prev => prev.map(imgData => 
+          imgData.id === imageId ? { ...imgData, loaded: true } : imgData
+        ));
+      };
+      img.src = imageUrl;
+      imageRefs.current[imageId] = img;
+      
+      return {
+        id: imageId,
+        image: imageUrl,
+        file,
+        boardMarks: [],
+        name: `Фото ${imagesData.length + index + 1}`,
+        plans: {},
+        markerSize: globalMarkerSize,
+        loaded: false,
+        isRemainder: false
+      };
+    });
 
-  setImagesData(prev => [...prev, ...newImages]);
-};
-const updateImagePlan = (imageId, logId, value) => {
-  setImagesData(prev => prev.map(image => 
-    image.id === imageId 
-      ? { 
-          ...image, 
-          plans: {
-            ...image.plans,
-            [logId]: value === '' ? undefined : parseInt(value) || 0
-          }
-        } 
-      : image
-  ));
-};
-const deleteImage = (imageId, e) => {
-  e.stopPropagation();
-  const imageToDelete = imagesData.find(img => img.id === imageId);
-  
-  if (imageToDelete?.image?.startsWith('blob:')) {
-    URL.revokeObjectURL(imageToDelete.image);
-  }
-  
-  if (imageRefs.current[imageId]?.src?.startsWith('blob:')) {
-    URL.revokeObjectURL(imageRefs.current[imageId].src);
-    delete imageRefs.current[imageId];
-  }
+    setImagesData(prev => [...prev, ...newImages]);
+  };
 
-  setImagesData(prev => {
-    const newImages = prev.filter(img => img.id !== imageId);
-    return newImages.map((img, index) => ({
-      ...img,
-      name: `Фото ${index + 1}`
-    }));
-  });
-  
-  if (currentImageId === imageId) {
-    setCurrentImageId(null);
-  }
-};
-const deleteMark = (clickedMark, imageId) => {
-  setImagesData(prev => prev.map(data => {
-    if (data.id !== imageId) return data;
-
-    // Удаляем маркер
-    const filteredMarks = data.boardMarks.filter(mark => mark.id !== clickedMark.id);
-    
-    // Пересчитываем номера ВСЕХ маркеров для этого logId
-    const marksForLog = filteredMarks
-      .filter(mark => mark.logId === clickedMark.logId)
-      .sort((a, b) => a.number - b.number)
-      .map((mark, index) => ({
-        ...mark,
-        number: index + 1 // Перенумеровываем последовательно
-      }));
-    
-    // Сохраняем маркеры с другими logId без изменений
-    const otherMarks = filteredMarks.filter(mark => mark.logId !== clickedMark.logId);
-    
-    return { 
-      ...data, 
-      boardMarks: [...otherMarks, ...marksForLog] 
-    };
-  }));
-};
-
-const processClick = (imageX, imageY, imageId) => {
-  const currentImageData = imagesData.find(data => data.id === imageId);
-  if (!currentImageData || !currentImageData.image) return;
-
-  const clickRadius = (currentImageData.markerSize || globalMarkerSize) * 1.2;
-
-  // Проверяем, был ли клик по существующему маркеру
-  const clickedMark = currentImageData.boardMarks.find((mark) => {
-    const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
-    return distance <= clickRadius;
-  });
-
-  if (clickedMark) {
-    deleteMark(clickedMark, imageId);
-    return;
-  }
-
-  if (selectedLog) {
-    // Получаем ВСЕ маркеры для этого logId и сортируем их по номеру
-    const marksForLog = currentImageData.boardMarks
-      .filter(m => m.logId === selectedLog.id)
-      .sort((a, b) => a.number - b.number);
-    
-    // Находим максимальный номер и добавляем 1
-    const maxNumber = marksForLog.length > 0 
-      ? Math.max(...marksForLog.map(m => m.number)) 
-      : 0;
-    const nextNumber = maxNumber + 1;
-
-    const newMark = {
-      id: Date.now(),
-      x: imageX,
-      y: imageY,
-      logId: selectedLog.id,
-      color: selectedLog.color,
-      number: nextNumber, // Используем следующий номер
-    };
-
-    setImagesData(prev => prev.map(data =>
-      data.id === imageId
-        ? { ...data, boardMarks: [...data.boardMarks, newMark] }
-        : data
+  const updateImagePlan = (imageId, logId, value) => {
+    setImagesData(prev => prev.map(image => 
+      image.id === imageId 
+        ? { 
+            ...image, 
+            plans: {
+              ...image.plans,
+              [logId]: value === '' ? undefined : parseInt(value) || 0
+            }
+          } 
+        : image
     ));
-  }
-};
+  };
 
-const handleDesktopClick = (e, imageId) => {
-  try {
-    if (!imageId || !isClick || isDragging || !canvasRef.current) return;
+  const deleteImage = (imageId, e) => {
+    e.stopPropagation();
+    const imageToDelete = imagesData.find(img => img.id === imageId);
     
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect) return;
+    if (imageToDelete?.image?.startsWith('blob:')) {
+      URL.revokeObjectURL(imageToDelete.image);
+    }
     
-    const currentImage = imagesData.find(data => data.id === imageId);
-    if (!currentImage) return;
+    if (imageRefs.current[imageId]?.src?.startsWith('blob:')) {
+      URL.revokeObjectURL(imageRefs.current[imageId].src);
+      delete imageRefs.current[imageId];
+    }
+
+    setImagesData(prev => {
+      const newImages = prev.filter(img => img.id !== imageId);
+      return newImages.map((img, index) => ({
+        ...img,
+        name: `Фото ${index + 1}`
+      }));
+    });
     
-    const img = imageRefs.current[imageId];
-    if (!img) return;
-    
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
-    
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
-    const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
-    
-    processClick(imageX, imageY, imageId);
-  } catch (error) {
-    console.error('Error in handleDesktopClick:', error);
-  }
-};
+    if (currentImageId === imageId) {
+      setCurrentImageId(null);
+    }
+  };
+
+  const deleteMark = (clickedMark, imageId) => {
+    setImagesData(prev => prev.map(data => {
+      if (data.id !== imageId) return data;
+
+      const filteredMarks = data.boardMarks.filter(mark => mark.id !== clickedMark.id);
+      
+      const marksForLog = filteredMarks
+        .filter(mark => mark.logId === clickedMark.logId)
+        .sort((a, b) => a.number - b.number)
+        .map((mark, index) => ({
+          ...mark,
+          number: index + 1
+        }));
+      
+      const otherMarks = filteredMarks.filter(mark => mark.logId !== clickedMark.logId);
+      
+      return { 
+        ...data, 
+        boardMarks: [...otherMarks, ...marksForLog] 
+      };
+    }));
+  };
+
+  const processClick = (imageX, imageY, imageId) => {
+    const currentImageData = imagesData.find(data => data.id === imageId);
+    if (!currentImageData || !currentImageData.image) return;
+
+    const clickRadius = (currentImageData.markerSize || globalMarkerSize) * 1.2;
+
+    const clickedMark = currentImageData.boardMarks.find((mark) => {
+      const distance = Math.sqrt((mark.x - imageX) ** 2 + (mark.y - imageY) ** 2);
+      return distance <= clickRadius;
+    });
+
+    if (clickedMark) {
+      deleteMark(clickedMark, imageId);
+      return;
+    }
+
+    if (selectedLog) {
+      const marksForLog = currentImageData.boardMarks
+        .filter(m => m.logId === selectedLog.id)
+        .sort((a, b) => a.number - b.number);
+      
+      const maxNumber = marksForLog.length > 0 
+        ? Math.max(...marksForLog.map(m => m.number)) 
+        : 0;
+      const nextNumber = maxNumber + 1;
+
+      const newMark = {
+        id: Date.now(),
+        x: imageX,
+        y: imageY,
+        logId: selectedLog.id,
+        color: selectedLog.color,
+        number: nextNumber,
+      };
+
+      setImagesData(prev => prev.map(data =>
+        data.id === imageId
+          ? { ...data, boardMarks: [...data.boardMarks, newMark] }
+          : data
+      ));
+    }
+  };
+
+  const handleDesktopClick = (e, imageId) => {
+    try {
+      if (!imageId || !isClick || isDragging || !canvasRef.current) return;
+      
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect) return;
+      
+      const currentImage = imagesData.find(data => data.id === currentImageId);
+      if (!currentImage) return;
+      
+      const img = imageRefs.current[currentImageId];
+      if (!img) return;
+      
+      const clientX = e.clientX - rect.left;
+      const clientY = e.clientY - rect.top;
+      
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      
+      const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
+      const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
+      
+      processClick(imageX, imageY, imageId);
+    } catch (error) {
+      console.error('Error in handleDesktopClick:', error);
+    }
+  };
 
   const handleMouseEnter = () => {
     document.body.style.overflow = 'hidden';
@@ -404,37 +392,37 @@ const handleDesktopClick = (e, imageId) => {
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
   };
 
-const handleTouchStart = (e) => {
-  if (e.cancelable) e.preventDefault();
-  touchStartTime.current = Date.now();
-  
-  if (e.touches.length === 1) {
-    const touch = e.touches[0];
-    setIsDragging(true);
-    setDragStart({
-      x: touch.clientX,
-      y: touch.clientY,
-      offsetX: canvasOffset.x,
-      offsetY: canvasOffset.y
-    });
-    setClickStartTime(Date.now());
-  } else if (e.touches.length === 2) {
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      const dist = Math.hypot(
-        touch1.clientX - touch2.clientX,
-        touch1.clientY - touch2.clientY
-      );
-      setInitialDistance(dist);
-      const centerX = (touch1.clientX + touch2.clientX) / 2;
-      const centerY = (touch1.clientY + touch2.clientY) / 2;
-      const containerRect = canvasContainerRef.current.getBoundingClientRect();
-      setPinchCenter({ 
-        x: centerX - containerRect.left, 
-        y: centerY - containerRect.top 
+  const handleTouchStart = (e) => {
+    if (e.cancelable) e.preventDefault();
+    touchStartTime.current = Date.now();
+    
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      setIsDragging(true);
+      setDragStart({
+        x: touch.clientX,
+        y: touch.clientY,
+        offsetX: canvasOffset.x,
+        offsetY: canvasOffset.y
       });
-    }
-  };
+      setClickStartTime(Date.now());
+    } else if (e.touches.length === 2) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const dist = Math.hypot(
+          touch1.clientX - touch2.clientX,
+          touch1.clientY - touch2.clientY
+        );
+        setInitialDistance(dist);
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+        const containerRect = canvasContainerRef.current.getBoundingClientRect();
+        setPinchCenter({ 
+          x: centerX - containerRect.left, 
+          y: centerY - containerRect.top 
+        });
+      }
+    };
 
   const handleTouchMove = (e) => {
     if (e.cancelable) e.preventDefault();
@@ -474,66 +462,63 @@ const handleTouchStart = (e) => {
     }
   };
 
-const handleTouchEnd = (e) => {
-  if (e.cancelable) e.preventDefault();
-  
-  // Если это был клик (не перетаскивание)
-  if (!isDragging && e.changedTouches?.length === 1) {
-    const now = Date.now();
-    const touchDuration = now - touchStartTime.current;
+  const handleTouchEnd = (e) => {
+    if (e.cancelable) e.preventDefault();
     
-    // Обрабатываем только короткие касания
-    if (touchDuration < 150 && currentImageId) {
-      handleMobileClick(e, currentImageId);
+    if (!isDragging && e.changedTouches?.length === 1) {
+      const now = Date.now();
+      const touchDuration = now - touchStartTime.current;
+      
+      if (touchDuration < 150 && currentImageId) {
+        handleMobileClick(e, currentImageId);
+      }
     }
-  }
-  
-  setIsDragging(false);
-  setInitialDistance(null);
-};
+    
+    setIsDragging(false);
+    setInitialDistance(null);
+  };
 
-const handleMobileClick = (e, imageId) => {
-  try {
-    if (isDragging || !selectedLog || !currentImageId) return;
-    
-    // Проверяем, было ли уже обработано это касание
-    if (e.processed) return;
-    e.processed = true;
-    
-    const touch = e.touches?.[0] || e.changedTouches?.[0];
-    if (!touch) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    if (!rect) return;
-    
-    const currentImage = imagesData.find(data => data.id === currentImageId);
-    if (!currentImage) return;
-    
-    const img = imageRefs.current[currentImageId];
-    if (!img) return;
-    
-    const imageWidth = img.naturalWidth;
-    const imageHeight = img.naturalHeight;
-    
-    const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
-    const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
-    
-    const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
-    const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
-    
-    const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
-    const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
-    
-    if (imageX >= 0 && imageY >= 0 && imageX <= imageWidth && imageY <= imageHeight) {
-      processClick(imageX, imageY, imageId);
+  const handleMobileClick = (e, imageId) => {
+    try {
+      if (isDragging || !selectedLog || !currentImageId) return;
+      
+      if (e.processed) return;
+      e.processed = true;
+      
+      const touch = e.touches?.[0] || e.changedTouches?.[0];
+      if (!touch) return;
+      
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      if (!rect) return;
+      
+      const currentImage = imagesData.find(data => data.id === currentImageId);
+      if (!currentImage) return;
+      
+      const img = imageRefs.current[currentImageId];
+      if (!img) return;
+      
+      const imageWidth = img.naturalWidth;
+      const imageHeight = img.naturalHeight;
+      
+      const clientX = (touch.clientX - rect.left) * window.devicePixelRatio;
+      const clientY = (touch.clientY - rect.top) * window.devicePixelRatio;
+      
+      const scaleX = canvas.width / (rect.width * window.devicePixelRatio);
+      const scaleY = canvas.height / (rect.height * window.devicePixelRatio);
+      
+      const imageX = ((clientX * scaleX) - canvasOffset.x) / zoomLevel;
+      const imageY = ((clientY * scaleY) - canvasOffset.y) / zoomLevel;
+      
+      if (imageX >= 0 && imageY >= 0 && imageX <= imageWidth && imageY <= imageHeight) {
+        processClick(imageX, imageY, imageId);
+      }
+    } catch (error) {
+      console.error('Error in handleMobileClick:', error);
     }
-  } catch (error) {
-    console.error('Error in handleMobileClick:', error);
-  }
-};
+  };
 
   const resetZoomAndPan = () => {
     setZoomLevel(1);
@@ -574,136 +559,134 @@ const handleMobileClick = (e, imageId) => {
   const handleLogSelect = (log) => {
     setSelectedLog((prev) => (prev?.id === log.id ? null : log));
   };
-// Функция для сохранения файла в IndexedDB
-const saveFileToIndexedDB = async (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: file.lastModified,
-        data: reader.result // сохраняем как dataURL
-      });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
 
-// Функция для восстановления файла из IndexedDB
-const restoreFileFromIndexedDB = (fileData) => {
-  return new File([fileData.data], fileData.name, {
-    type: fileData.type,
-    lastModified: fileData.lastModified
-  });
-};
+  const saveFileToIndexedDB = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified,
+          data: reader.result
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
 
-useEffect(() => {
-  if (!currentImageId || !imagesData.length) return;
-  
-  const currentImage = imagesData.find(data => data.id === currentImageId);
-  if (!currentImage || !currentImage.image) return;
+  const restoreFileFromIndexedDB = (fileData) => {
+    return new File([fileData.data], fileData.name, {
+      type: fileData.type,
+      lastModified: fileData.lastModified
+    });
+  };
 
-  const canvas = canvasRef.current;
-  const ctx = canvas.getContext('2d');
-  const container = canvasContainerRef.current;
-  
-  const img = imageRefs.current[currentImageId];
-  if (!img) return;
-
-  // Проверяем, загружено ли изображение
-  if (!img.complete || img.naturalWidth === 0) {
-    img.onload = () => {
-      drawCanvas(canvas, ctx, container, img, currentImage);
-    };
-    return;
-  }
-
-  drawCanvas(canvas, ctx, container, img, currentImage);
-}, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, color, logs]);
-
-const drawCanvas = (canvas, ctx, container, img, currentImage) => {
-  try {
-    if (!canvas || !ctx || !container || !img || !currentImage) return;
+  useEffect(() => {
+    if (!currentImageId || !imagesData.length) return;
     
-    const naturalWidth = img.naturalWidth;
-    const naturalHeight = img.naturalHeight;
-    
-    canvas.width = naturalWidth;
-    canvas.height = naturalHeight;
-    
-    const containerWidth = container.clientWidth;
-    const scale = containerWidth / naturalWidth;
-    const displayHeight = naturalHeight * scale;
-    
-    canvas.style.width = `${containerWidth}px`;
-    canvas.style.height = `${displayHeight}px`;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.translate(canvasOffset.x, canvasOffset.y);
-    ctx.scale(zoomLevel, zoomLevel);
-    ctx.drawImage(img, 0, 0, naturalWidth, naturalHeight);
+    const currentImage = imagesData.find(data => data.id === currentImageId);
+    if (!currentImage || !currentImage.image) return;
 
-    if (currentImage.boardMarks?.length > 0) {
-      currentImage.boardMarks.forEach((mark) => {
-        const log = logs.find((l) => l.id === mark.logId);
-        if (log) {
-          drawMark(ctx, mark.x, mark.y, log.color, mark.number, null, currentImage.id);
-        }
-      });
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const container = canvasContainerRef.current;
+    
+    const img = imageRefs.current[currentImageId];
+    if (!img) return;
+
+    if (!img.complete || img.naturalWidth === 0) {
+      img.onload = () => {
+        drawCanvas(canvas, ctx, container, img, currentImage);
+      };
+      return;
     }
-    
-    if (showMarkerPreview) {
-      const centerX = naturalWidth / 2;
-      const centerY = naturalHeight / 2;
-      const previewSize = (currentImage.markerSize || globalMarkerSize) * window.devicePixelRatio;
+
+    drawCanvas(canvas, ctx, container, img, currentImage);
+  }, [currentImageId, imagesData, zoomLevel, canvasOffset, globalMarkerSize, showMarkerPreview, color, logs]);
+
+  const drawCanvas = (canvas, ctx, container, img, currentImage) => {
+    try {
+      if (!canvas || !ctx || !container || !img || !currentImage) return;
+      
+      const naturalWidth = img.naturalWidth;
+      const naturalHeight = img.naturalHeight;
+      
+      canvas.width = naturalWidth;
+      canvas.height = naturalHeight;
+      
+      const containerWidth = container.clientWidth;
+      const scale = containerWidth / naturalWidth;
+      const displayHeight = naturalHeight * scale;
+      
+      canvas.style.width = `${containerWidth}px`;
+      canvas.style.height = `${displayHeight}px`;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(canvasOffset.x, canvasOffset.y);
+      ctx.scale(zoomLevel, zoomLevel);
+      ctx.drawImage(img, 0, 0, naturalWidth, naturalHeight);
+
+      if (currentImage.boardMarks?.length > 0) {
+        currentImage.boardMarks.forEach((mark) => {
+          const log = logs.find((l) => l.id === mark.logId);
+          if (log) {
+            drawMark(ctx, mark.x, mark.y, log.color, mark.number, null, currentImage.id);
+          }
+        });
+      }
+      
+      if (showMarkerPreview) {
+        const centerX = naturalWidth / 2;
+        const centerY = naturalHeight / 2;
+        const previewSize = (currentImage.markerSize || globalMarkerSize) * window.devicePixelRatio;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, previewSize, 0, 2 * Math.PI);
+        ctx.fillStyle = color + '80';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${previewSize * 0.8}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('?', centerX, centerY);
+      }
+      ctx.restore();
+    } catch (error) {
+      console.error('Error in drawCanvas:', error);
+    }
+  };
+
+  const drawMark = (ctx, x, y, color, number, size, imageId) => {
+    try {
+      if (!ctx) return;
+      
+      const currentImage = imagesData.find(img => img.id === imageId);
+      const markSizeInPixels = (currentImage?.markerSize || globalMarkerSize) * window.devicePixelRatio;
+      
       ctx.beginPath();
-      ctx.arc(centerX, centerY, previewSize, 0, 2 * Math.PI);
-      ctx.fillStyle = color + '80';
+      ctx.arc(x, y, markSizeInPixels, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
       ctx.fill();
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${previewSize * 0.8}px Arial`;
+      ctx.font = `bold ${markSizeInPixels * 0.8}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('?', centerX, centerY);
+      ctx.fillText(number.toString(), x, y);
+    } catch (error) {
+      console.error('Error in drawMark:', error);
     }
-    ctx.restore();
-  } catch (error) {
-    console.error('Error in drawCanvas:', error);
-  }
-};
+  };
 
-const drawMark = (ctx, x, y, color, number, size, imageId) => {
-  try {
-    if (!ctx) return;
-    
-    const currentImage = imagesData.find(img => img.id === imageId);
-    const markSizeInPixels = (currentImage?.markerSize || globalMarkerSize) * window.devicePixelRatio;
-    
-    ctx.beginPath();
-    ctx.arc(x, y, markSizeInPixels, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${markSizeInPixels * 0.8}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(number.toString(), x, y);
-  } catch (error) {
-    console.error('Error in drawMark:', error);
-  }
-};
+  const formatDate = (date) => {
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    return `${day}.${month}.${date.getFullYear()}`;
+  };
 
-const formatDate = (date) => {
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  return `${day}.${month}.${date.getFullYear()}`;
-};
-
-const exportToExcel = async () => {
+ const exportToExcel = async () => {
   try {
     if (imagesData.length === 0) {
       alert('Нет данных для экспорта');
@@ -718,7 +701,6 @@ const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const formattedDate = formatDate(documentDate);
 
-    // Стили с полным центрированием
     const headerStyle = {
       fill: {
         type: 'pattern',
@@ -757,140 +739,92 @@ const exportToExcel = async () => {
       }
     };
 
-    // 1. Создаем лист со сводкой
     const summarySheet = workbook.addWorksheet('Сводка');
     
-    // Заголовки документа
     summarySheet.mergeCells('A1:E1');
-    summarySheet.getCell('A1').value = `Документ №: ${documentNumber}`;
-    summarySheet.getCell('A2').value = `Дата: ${formattedDate}`;
+    const titleCell = summarySheet.getCell('A1');
+    titleCell.value = `Документ №: ${documentNumber}`;
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: 'center', vertical: 'center' };
     
-    // Стили для заголовков
-    summarySheet.getCell('A1').font = { bold: true, size: 14 };
-    summarySheet.getCell('A1').alignment = { horizontal: 'center' };
-    summarySheet.getCell('A2').font = { bold: true };
+    const dateCell = summarySheet.getCell('A2');
+    dateCell.value = `Дата: ${formattedDate}`;
+    dateCell.font = { bold: true };
+    dateCell.alignment = { horizontal: 'left', vertical: 'center' };
 
-    // 2. Собираем статистику
-    const summaryData = {};
     const globalSummary = {};
-    let globalTotalCount = 0;
-    let globalPlanCount = 0;
+    const imageSummaryData = [];
 
-    // Обрабатываем каждое изображение
+    logs.forEach(log => {
+      const key = `${log.width}x${log.height}x${log.length}`;
+      globalSummary[key] = {
+        count: 0,
+        remainder: 0,
+        plan: 0,
+        color: log.color
+      };
+    });
+
     for (const [index, imageData] of imagesData.entries()) {
       const worksheet = workbook.addWorksheet(`Фото_${index + 1}`);
       
-      // Настройки листа
       worksheet.properties.defaultColWidth = 15;
-      worksheet.views = [{
-        state: 'frozen',
-        ySplit: 4
-      }];
+      worksheet.views = [{ state: 'frozen', ySplit: 4 }];
       
-      // Заголовки
       worksheet.mergeCells('A1:E1');
       worksheet.getCell('A1').value = `Документ №: ${documentNumber}`;
       worksheet.getCell('A2').value = `Дата: ${formattedDate}`;
-      worksheet.getCell('A3').value = `Изображение: ${imageData.name}`;
+      worksheet.getCell('A3').value = `Изображение: ${imageData.name}${imageData.isRemainder ? ' (Остаток)' : ''}`;
       
-      // Стили для заголовков
       worksheet.getCell('A1').font = { bold: true, size: 14 };
       worksheet.getCell('A1').alignment = { horizontal: 'center' };
       worksheet.getCell('A2').font = { bold: true };
       worksheet.getCell('A3').font = { bold: true };
 
-      // Статистика по доскам
       const logStats = {};
-      let imageTotalCount = 0;
-      let imagePlanCount = 0;
-      
+      logs.forEach(log => {
+        const key = `${log.width}x${log.height}x${log.length}`;
+        logStats[key] = {
+          count: 0,
+          plan: imageData.plans?.[log.id] || 0,
+          color: log.color,
+          isRemainder: imageData.isRemainder
+        };
+      });
+
       imageData.boardMarks.forEach(mark => {
         const log = logs.find(l => l.id === mark.logId);
         if (log) {
           const key = `${log.width}x${log.height}x${log.length}`;
-          
-          if (!logStats[key]) {
-            logStats[key] = { 
-              count: 0, 
-              color: log.color,
-              plan: imageData.plans?.[log.id] || 0
-            };
-          }
           logStats[key].count++;
-          imageTotalCount++;
           
-          const summaryKey = `${imageData.name}|${key}`;
-          if (!summaryData[summaryKey]) {
-            summaryData[summaryKey] = {
-              imageName: imageData.name,
-              size: key,
-              count: 0,
-              color: log.color,
-              plan: imageData.plans?.[log.id] || 0
-            };
+          if (imageData.isRemainder) {
+            globalSummary[key].remainder += 1;
+          } else {
+            globalSummary[key].count += 1;
           }
-          summaryData[summaryKey].count++;
-          globalTotalCount++;
-          
-          if (!globalSummary[key]) {
-            globalSummary[key] = { 
-              count: 0, 
-              color: log.color,
-              plan: 0
-            };
-          }
-          globalSummary[key].count++;
         }
       });
 
-      // Добавляем планы для досок, которые есть в плане, но не отмечены на фото
       logs.forEach(log => {
         const key = `${log.width}x${log.height}x${log.length}`;
-        const planValue = imageData.plans?.[log.id] || 0;
-        
-        if (planValue > 0) {
-          if (!logStats[key]) {
-            logStats[key] = {
-              count: 0,
-              color: log.color,
-              plan: planValue
-            };
-          }
-          
-          imagePlanCount += planValue;
-          
-          if (!globalSummary[key]) {
-            globalSummary[key] = {
-              count: 0,
-              color: log.color,
-              plan: 0
-            };
-          }
-          
-          const summaryKey = `${imageData.name}|${key}`;
-          if (!summaryData[summaryKey]) {
-            summaryData[summaryKey] = {
-              imageName: imageData.name,
-              size: key,
-              count: 0,
-              color: log.color,
-              plan: planValue
-            };
+        if (imageData.plans?.[log.id]) {
+          if (imageData.isRemainder) {
+            globalSummary[key].plan -= imageData.plans[log.id];
+          } else {
+            globalSummary[key].plan += imageData.plans[log.id];
           }
         }
       });
 
-      // Таблица с данными
       let tableRow = 5;
       
-      // Заголовки таблицы
       worksheet.getCell(`A${tableRow}`).value = 'Размер доски';
       worksheet.getCell(`B${tableRow}`).value = 'План';
       worksheet.getCell(`C${tableRow}`).value = 'Факт';
       worksheet.getCell(`D${tableRow}`).value = 'Отклонение';
       worksheet.getCell(`E${tableRow}`).value = 'Цвет';
       
-      // Стили для заголовков
       ['A', 'B', 'C', 'D', 'E'].forEach(col => {
         const cell = worksheet.getCell(`${col}${tableRow}`);
         Object.assign(cell, headerStyle);
@@ -898,80 +832,67 @@ const exportToExcel = async () => {
 
       tableRow++;
       
-      // Данные таблицы
       Object.entries(logStats).forEach(([size, data]) => {
+        if (data.count === 0 && data.plan === 0) return;
+
+        const factValue = data.isRemainder ? -data.count : data.count;
+        const planValue = data.isRemainder ? -data.plan : data.plan;
+        const deviation = factValue - planValue;
+
         worksheet.getCell(`A${tableRow}`).value = size;
-        worksheet.getCell(`B${tableRow}`).value = data.plan;
-        worksheet.getCell(`C${tableRow}`).value = data.count;
-        worksheet.getCell(`D${tableRow}`).value = data.count - data.plan;
+        worksheet.getCell(`B${tableRow}`).value = planValue;
+        worksheet.getCell(`C${tableRow}`).value = factValue;
+        worksheet.getCell(`D${tableRow}`).value = deviation;
         
-        // Подсветка ячейки отклонения
         const deviationCell = worksheet.getCell(`D${tableRow}`);
-        if (data.count > data.plan) {
-          deviationCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFFCCCC' }
-          };
-        } else if (data.count < data.plan) {
-          deviationCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFCCFFCC' }
-          };
+        if (deviation > 0) {
+          deviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+        } else if (deviation < 0) {
+          deviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
         }
         
-        // Ячейка с цветом
         const colorCell = worksheet.getCell(`E${tableRow}`);
-        colorCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: data.color.replace('#', 'FF') }
-        };
+        colorCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: data.color.replace('#', 'FF') } };
         
-        // Стили для всех ячеек
         ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-          const cell = worksheet.getCell(`${col}${tableRow}`);
-          Object.assign(cell, centeredCellStyle);
+          Object.assign(worksheet.getCell(`${col}${tableRow}`), centeredCellStyle);
+        });
+        
+        imageSummaryData.push({
+          imageName: imageData.name,
+          size: size,
+          count: data.count,
+          plan: data.plan,
+          color: data.color,
+          isRemainder: data.isRemainder
         });
         
         tableRow++;
       });
 
-      // Итоговая строка
+      const totalPlan = Object.values(logStats).reduce((sum, item) => sum + (item.isRemainder ? -item.plan : item.plan), 0);
+      const totalFact = Object.values(logStats).reduce((sum, item) => sum + (item.isRemainder ? -item.count : item.count), 0);
+      const totalDeviation = totalFact - totalPlan;
+
       worksheet.getCell(`A${tableRow}`).value = 'Всего:';
-      worksheet.getCell(`B${tableRow}`).value = imagePlanCount;
-      worksheet.getCell(`C${tableRow}`).value = imageTotalCount;
-      worksheet.getCell(`D${tableRow}`).value = imageTotalCount - imagePlanCount;
+      worksheet.getCell(`B${tableRow}`).value = totalPlan;
+      worksheet.getCell(`C${tableRow}`).value = totalFact;
+      worksheet.getCell(`D${tableRow}`).value = totalDeviation;
       
-      // Подсветка итоговой ячейки отклонения
       const totalDeviationCell = worksheet.getCell(`D${tableRow}`);
-      if (imageTotalCount > imagePlanCount) {
-        totalDeviationCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFFCCCC' }
-        };
-      } else if (imageTotalCount < imagePlanCount) {
-        totalDeviationCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFCCFFCC' }
-        };
+      if (totalDeviation > 0) {
+        totalDeviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+      } else if (totalDeviation < 0) {
+        totalDeviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
       }
       
       worksheet.getCell(`B${tableRow}`).font = { bold: true };
       worksheet.getCell(`C${tableRow}`).font = { bold: true };
       worksheet.getCell(`D${tableRow}`).font = { bold: true };
       ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-        const cell = worksheet.getCell(`${col}${tableRow}`);
-        Object.assign(cell, centeredCellStyle);
+        Object.assign(worksheet.getCell(`${col}${tableRow}`), centeredCellStyle);
       });
 
-      // Добавление изображения (восстановленная версия)
-      const imageStartRow = 11;
-      const imageEndRow = 54;
-      
       try {
         const img = await new Promise((resolve, reject) => {
           const img = new Image();
@@ -1008,7 +929,7 @@ const exportToExcel = async () => {
           extension: 'png',
         });
 
-        const availableRows = imageEndRow;
+        const availableRows = 54;
         const rowHeight = 15;
         const maxHeightInPoints = availableRows * rowHeight;
         
@@ -1017,32 +938,24 @@ const exportToExcel = async () => {
         const desiredHeightInPoints = maxHeightInPoints;
 
         worksheet.addImage(imageId, {
-          tl: { col: 0, row: imageStartRow },
-          ext: { 
-            width: desiredWidthInPoints, 
-            height: desiredHeightInPoints 
-          }
+          tl: { col: 0, row: 11 },
+          ext: { width: desiredWidthInPoints, height: desiredHeightInPoints }
         });
 
-        for (let i = imageStartRow; i < imageEndRow; i++) {
-          const row = worksheet.getRow(i + 1);
-          row.height = rowHeight;
+        for (let i = 11; i < availableRows; i++) {
+          worksheet.getRow(i + 1).height = rowHeight;
         }
 
-        const colWidth = 10;
-        const colsNeeded = Math.ceil(desiredWidthInPoints / (colWidth * 7));
+        const colsNeeded = Math.ceil(desiredWidthInPoints / (10 * 7));
         for (let i = 1; i <= colsNeeded; i++) {
-          worksheet.getColumn(i).width = colWidth;
+          worksheet.getColumn(i).width = 10;
         }
-
       } catch (error) {
-        console.error('Ошибка при обработке изображения:', error);
-        worksheet.getCell(`A${imageStartRow}`).value = 'Не удалось загрузить изображение';
-        Object.assign(worksheet.getCell(`A${imageStartRow}`), centeredCellStyle);
+        worksheet.getCell('A11').value = 'Не удалось загрузить изображение';
+        Object.assign(worksheet.getCell('A11'), centeredCellStyle);
       }
     }
 
-    // 3. Общая сводка (первая таблица)
     summarySheet.getCell('A4').value = 'Общий итог';
     summarySheet.mergeCells('A4:E4');
     summarySheet.getCell('A5').value = 'Размер доски';
@@ -1051,100 +964,68 @@ const exportToExcel = async () => {
     summarySheet.getCell('D5').value = 'Отклонение';
     summarySheet.getCell('E5').value = 'Цвет';
 
-    // Стили для заголовков
     ['A4', 'B4', 'C4', 'D4', 'E4'].forEach(cellAddress => {
       const cell = summarySheet.getCell(cellAddress);
       Object.assign(cell, headerStyle);
     });
 
-    // Собираем планы для каждого размера доски
-    logs.forEach(log => {
-      const key = `${log.width}x${log.height}x${log.length}`;
-      if (!globalSummary[key]) {
-        globalSummary[key] = {
-          count: 0,
-          color: log.color,
-          plan: 0
-        };
-      }
-      
-      imagesData.forEach(imageData => {
-        const planValue = imageData.plans?.[log.id] || 0;
-        globalSummary[key].plan += planValue;
-        globalPlanCount += planValue;
-      });
-    });
-
     let globalSummaryRow = 6;
+    let totalGlobalPlan = 0;
+    let totalGlobalFact = 0;
+
     Object.entries(globalSummary).forEach(([size, data]) => {
+      if (data.count === 0 && data.remainder === 0 && data.plan === 0) return;
+
+      const factValue = data.count - data.remainder;
+      const planValue = data.plan;
+      const deviation = factValue - planValue;
+
       summarySheet.getCell(`A${globalSummaryRow}`).value = size;
-      summarySheet.getCell(`B${globalSummaryRow}`).value = data.plan;
-      summarySheet.getCell(`C${globalSummaryRow}`).value = data.count;
-      summarySheet.getCell(`D${globalSummaryRow}`).value = data.count - data.plan;
+      summarySheet.getCell(`B${globalSummaryRow}`).value = planValue;
+      summarySheet.getCell(`C${globalSummaryRow}`).value = factValue;
+      summarySheet.getCell(`D${globalSummaryRow}`).value = deviation;
       
-      // Подсветка ячейки отклонения
       const deviationCell = summarySheet.getCell(`D${globalSummaryRow}`);
-      if (data.count > data.plan) {
-        deviationCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFFCCCC' }
-        };
-      } else if (data.count < data.plan) {
-        deviationCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFCCFFCC' }
-        };
+      if (deviation > 0) {
+        deviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+      } else if (deviation < 0) {
+        deviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
       }
       
-      // Ячейка с цветом
       const colorCell = summarySheet.getCell(`E${globalSummaryRow}`);
-      colorCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: data.color.replace('#', 'FF') }
-      };
+      colorCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: data.color.replace('#', 'FF') } };
       
       ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-        const cell = summarySheet.getCell(`${col}${globalSummaryRow}`);
-        Object.assign(cell, centeredCellStyle);
+        Object.assign(summarySheet.getCell(`${col}${globalSummaryRow}`), centeredCellStyle);
       });
+
+      totalGlobalPlan += planValue;
+      totalGlobalFact += factValue;
       
       globalSummaryRow++;
     });
 
-    // Итоговая строка
+    const totalGlobalDeviation = totalGlobalFact - totalGlobalPlan;
+
     summarySheet.getCell(`A${globalSummaryRow}`).value = 'Всего:';
-    summarySheet.getCell(`B${globalSummaryRow}`).value = globalPlanCount;
-    summarySheet.getCell(`C${globalSummaryRow}`).value = globalTotalCount;
-    summarySheet.getCell(`D${globalSummaryRow}`).value = globalTotalCount - globalPlanCount;
+    summarySheet.getCell(`B${globalSummaryRow}`).value = totalGlobalPlan;
+    summarySheet.getCell(`C${globalSummaryRow}`).value = totalGlobalFact;
+    summarySheet.getCell(`D${globalSummaryRow}`).value = totalGlobalDeviation;
     
-    // Подсветка итоговой ячейки отклонения
-    const totalDeviationCell2 = summarySheet.getCell(`D${globalSummaryRow}`);
-    if (globalTotalCount > globalPlanCount) {
-      totalDeviationCell2.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFFCCCC' }
-      };
-    } else if (globalTotalCount < globalPlanCount) {
-      totalDeviationCell2.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFCCFFCC' }
-      };
+    const totalDeviationCell = summarySheet.getCell(`D${globalSummaryRow}`);
+    if (totalGlobalDeviation > 0) {
+      totalDeviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+    } else if (totalGlobalDeviation < 0) {
+      totalDeviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
     }
     
     summarySheet.getCell(`B${globalSummaryRow}`).font = { bold: true };
     summarySheet.getCell(`C${globalSummaryRow}`).font = { bold: true };
     summarySheet.getCell(`D${globalSummaryRow}`).font = { bold: true };
     ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-      const cell = summarySheet.getCell(`${col}${globalSummaryRow}`);
-      Object.assign(cell, centeredCellStyle);
+      Object.assign(summarySheet.getCell(`${col}${globalSummaryRow}`), centeredCellStyle);
     });
 
-    // 4. Сводная таблица по изображениям (вторая таблица)
     const imageSummaryStartRow = globalSummaryRow + 2;
     summarySheet.getCell(`A${imageSummaryStartRow}`).value = 'Изображение';
     summarySheet.getCell(`B${imageSummaryStartRow}`).value = 'Размер доски';
@@ -1153,108 +1034,69 @@ const exportToExcel = async () => {
     summarySheet.getCell(`E${imageSummaryStartRow}`).value = 'Отклонение';
     summarySheet.getCell(`F${imageSummaryStartRow}`).value = 'Цвет';
     
-    // Применяем стили к заголовкам
     ['A', 'B', 'C', 'D', 'E', 'F'].forEach(col => {
       const cell = summarySheet.getCell(`${col}${imageSummaryStartRow}`);
       Object.assign(cell, headerStyle);
     });
 
     let summaryRow = imageSummaryStartRow + 1;
-    Object.values(summaryData).forEach(item => {
+    imageSummaryData.forEach(item => {
+      if (item.count === 0 && item.plan === 0) return;
+
+      const factValue = item.isRemainder ? -item.count : item.count;
+      const planValue = item.isRemainder ? -item.plan : item.plan;
+      const deviation = factValue - planValue;
+
       summarySheet.getCell(`A${summaryRow}`).value = item.imageName;
       summarySheet.getCell(`B${summaryRow}`).value = item.size;
-      summarySheet.getCell(`C${summaryRow}`).value = item.plan;
-      summarySheet.getCell(`D${summaryRow}`).value = item.count;
-      summarySheet.getCell(`E${summaryRow}`).value = item.count - item.plan;
+      summarySheet.getCell(`C${summaryRow}`).value = planValue;
+      summarySheet.getCell(`D${summaryRow}`).value = factValue;
+      summarySheet.getCell(`E${summaryRow}`).value = deviation;
       
-      // Подсветка ячейки отклонения
       const deviationCell = summarySheet.getCell(`E${summaryRow}`);
-      if (item.count > item.plan) {
-        deviationCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFFCCCC' }
-        };
-      } else if (item.count < item.plan) {
-        deviationCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFCCFFCC' }
-        };
+      if (deviation > 0) {
+        deviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+      } else if (deviation < 0) {
+        deviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
       }
       
-      // Ячейка с цветом
       const colorCell = summarySheet.getCell(`F${summaryRow}`);
-      colorCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: item.color.replace('#', 'FF') }
-      };
+      colorCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: item.color.replace('#', 'FF') } };
       
       ['A', 'B', 'C', 'D', 'E', 'F'].forEach(col => {
-        const cell = summarySheet.getCell(`${col}${summaryRow}`);
-        Object.assign(cell, centeredCellStyle);
+        Object.assign(summarySheet.getCell(`${col}${summaryRow}`), centeredCellStyle);
       });
       
       summaryRow++;
     });
 
-    // Итоговая строка
+    const totalImagePlan = imageSummaryData.reduce((sum, item) => sum + (item.isRemainder ? -item.plan : item.plan), 0);
+    const totalImageFact = imageSummaryData.reduce((sum, item) => sum + (item.isRemainder ? -item.count : item.count), 0);
+    const totalImageDeviation = totalImageFact - totalImagePlan;
+
     summarySheet.getCell(`B${summaryRow}`).value = 'Всего:';
-    summarySheet.getCell(`C${summaryRow}`).value = Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0);
-    summarySheet.getCell(`D${summaryRow}`).value = globalTotalCount;
-    summarySheet.getCell(`E${summaryRow}`).value = globalTotalCount - Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0);
+    summarySheet.getCell(`C${summaryRow}`).value = totalImagePlan;
+    summarySheet.getCell(`D${summaryRow}`).value = totalImageFact;
+    summarySheet.getCell(`E${summaryRow}`).value = totalImageDeviation;
     
-    // Подсветка итоговой ячейки отклонения
-    const totalDeviationCell = summarySheet.getCell(`E${summaryRow}`);
-    if (globalTotalCount > Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0)) {
-      totalDeviationCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFFCCCC' }
-      };
-    } else if (globalTotalCount < Object.values(summaryData).reduce((sum, item) => sum + item.plan, 0)) {
-      totalDeviationCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFCCFFCC' }
-      };
+    const totalImageDeviationCell = summarySheet.getCell(`E${summaryRow}`);
+    if (totalImageDeviation > 0) {
+      totalImageDeviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+    } else if (totalImageDeviation < 0) {
+      totalImageDeviationCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
     }
     
     summarySheet.getCell(`C${summaryRow}`).font = { bold: true };
     summarySheet.getCell(`D${summaryRow}`).font = { bold: true };
     summarySheet.getCell(`E${summaryRow}`).font = { bold: true };
     ['B', 'C', 'D', 'E', 'F'].forEach(col => {
-      const cell = summarySheet.getCell(`${col}${summaryRow}`);
-      Object.assign(cell, centeredCellStyle);
+      Object.assign(summarySheet.getCell(`${col}${summaryRow}`), centeredCellStyle);
     });
 
-    // 5. Настраиваем ширину колонок
-    summarySheet.columns = [
-      { key: 'globalSize', width: 18 },  // Размер доски
-      { key: 'globalPlan', width: 10 },  // План
-      { key: 'globalFact', width: 10 },  // Факт
-      { key: 'globalDeviation', width: 10 },  // Отклонение
-      { key: 'globalColor', width: 8 },  // Цвет
-      { key: 'color', width: 8 },       // Разделитель
-    ];
-
-    // 6. Гарантированное центрирование всех ячеек
-    for (let i = 1; i <= summarySheet.rowCount; i++) {
-      const row = summarySheet.getRow(i);
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        if (!cell.style?.alignment) {
-          cell.alignment = { horizontal: 'center', vertical: 'center' };
-        }
-      });
-    }
-
-    // 7. Генерируем и сохраняем файл
     const buffer = await workbook.xlsx.writeBuffer();
     const fileName = `${documentNumber}_${formattedDate.replace(/\./g, '-')}.xlsx`;
     saveAs(new Blob([buffer]), fileName);
 
-    // 8. Очищаем данные
     clearAllData();
 
   } catch (error) {
@@ -1263,46 +1105,40 @@ const exportToExcel = async () => {
   }
 };
 
-// Функция для очистки всех данных
-const clearAllData = () => {
-  // Очистка blob URL
-  imagesData.forEach(img => {
-    if (img.image?.startsWith('blob:')) {
-      URL.revokeObjectURL(img.image);
+  const clearAllData = () => {
+    imagesData.forEach(img => {
+      if (img.image?.startsWith('blob:')) {
+        URL.revokeObjectURL(img.image);
+      }
+    });
+
+    Object.values(imageRefs.current).forEach(img => {
+      if (img.src?.startsWith('blob:')) {
+        URL.revokeObjectURL(img.src);
+      }
+    });
+    imageRefs.current = {};
+
+    setImagesData([]);
+    setLogs([]);
+    setCurrentImageId(null);
+    setWidth('');
+    setHeight('');
+    setLength('');
+    setColor(colorPalette.accent);
+    setSelectedLog(null);
+    setGlobalMarkerSize(isMobile ? 40 : 20);
+    setZoomLevel(1);
+    setCanvasOffset({ x: 0, y: 0 });
+    setDocumentNumber('');
+    setDocumentDate(new Date());
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
-  });
 
-  // Очистка refs
-  Object.values(imageRefs.current).forEach(img => {
-    if (img.src?.startsWith('blob:')) {
-      URL.revokeObjectURL(img.src);
-    }
-  });
-  imageRefs.current = {};
-
-  // Сброс состояния
-  setImagesData([]);
-  setLogs([]);
-  setCurrentImageId(null);
-  setWidth('');
-  setHeight('');
-  setLength('');
-  setColor(colorPalette.accent);
-  setSelectedLog(null);
-  setGlobalMarkerSize(isMobile ? 40 : 20);
-  setZoomLevel(1);
-  setCanvasOffset({ x: 0, y: 0 });
-  setDocumentNumber('');
-  setDocumentDate(new Date());
-
-  // Очистка поля ввода файлов
-  if (fileInputRef.current) {
-    fileInputRef.current.value = '';
-  }
-
-  // Очистка IndexedDB
-  set(STORAGE_KEY, null).catch(e => console.error("Ошибка очистки IndexedDB:", e));
-};
+    set(STORAGE_KEY, null).catch(e => console.error("Ошибка очистки IndexedDB:", e));
+  };
 
   useEffect(() => {
     const container = canvasContainerRef.current;
@@ -1330,145 +1166,134 @@ const clearAllData = () => {
     };
   }, []);
 
-
-
-useEffect(() => {
-  const saveState = async () => {
-  try {
-    // Сохраняем только те изображения, у которых есть файл
-    const imagesToSave = await Promise.all(
-      imagesData.map(async (img) => {
-        // Если есть файл, сохраняем его данные
-        if (img.file) {
-          const fileData = await saveFileToIndexedDB(img.file);
-          return {
-            ...img,
-            fileData: fileData,
-            image: null, // Не сохраняем URL, он временный
-            plans: img.plans || {}, // Сохраняем планы
-            file: null   // Файл сохраняем в fileData
-          };
-        }
-        // Если файла нет (например, при первой загрузке)
-        return img;
-      })
-    );
-
-    const stateToSave = {
-      imagesData: imagesToSave,
-      logs,
-      currentImageId,
-      width,
-      height,
-      length,
-      color,
-      selectedLog,
-      globalMarkerSize,
-      documentNumber,
-      documentDate: documentDate.toISOString()
-    };
-
-    await set(STORAGE_KEY, stateToSave);
-  } catch (e) {
-    console.error("Ошибка сохранения состояния:", e);
-  }
-};
-
-  const save = async () => {
-    await saveState();
-  };
-  
-  save();
-}, [imagesData, logs, currentImageId, width, height, length, color, selectedLog, globalMarkerSize, documentNumber, documentDate]);
-
-useEffect(() => {
-  // Замените функцию loadSavedState на эту версию:
-const loadSavedState = async () => {
-  try {
-    const savedState = await get(STORAGE_KEY);
-    if (savedState) {
-      // Восстанавливаем основные данные
-      setLogs(savedState.logs || []);
-      setCurrentImageId(savedState.currentImageId || null);
-      setWidth(savedState.width || '');
-      setHeight(savedState.height || '');
-      setLength(savedState.length || '');
-      setColor(savedState.color || colorPalette.accent);
-      setSelectedLog(savedState.selectedLog || null);
-      setGlobalMarkerSize(savedState.globalMarkerSize || (isMobile ? 40 : 20));
-      setDocumentNumber(savedState.documentNumber || '');
-      setDocumentDate(savedState.documentDate ? new Date(savedState.documentDate) : new Date());
-      
-      // Восстанавливаем изображения
-      if (savedState.imagesData && savedState.imagesData.length > 0) {
-        const restoredImages = await Promise.all(
-          savedState.imagesData.map(async imgData => {
-            if (imgData.fileData) {
-              try {
-                // Преобразуем dataURL обратно в blob
-                const response = await fetch(imgData.fileData.data);
-                const blob = await response.blob();
-                const file = new File([blob], imgData.fileData.name, {
-                  type: imgData.fileData.type,
-                  lastModified: imgData.fileData.lastModified
-                });
-                
-                // Создаем новый blob URL
-                const imageUrl = URL.createObjectURL(file);
-                
-                // Сохраняем изображение в refs
-                const img = new Image();
-                img.src = imageUrl;
-                imageRefs.current[imgData.id] = img;
-                
-                return {
-                  ...imgData,
-                  image: imageUrl,
-                  file: file,
-                  markerSize: imgData.markerSize || savedState.globalMarkerSize || (isMobile ? 40 : 20)
-                };
-              } catch (e) {
-                console.error("Ошибка восстановления файла:", e);
-                return null;
-              }
+  useEffect(() => {
+    const saveState = async () => {
+      try {
+        const imagesToSave = await Promise.all(
+          imagesData.map(async (img) => {
+            if (img.file) {
+              const fileData = await saveFileToIndexedDB(img.file);
+              return {
+                ...img,
+                fileData: fileData,
+                image: null,
+                plans: img.plans || {},
+                file: null,
+                isRemainder: img.isRemainder || false
+              };
             }
-            return null;
+            return img;
           })
         );
-        
-        setImagesData(restoredImages.filter(img => img !== null));
-      }
-    }
-  } catch (e) {
-    console.error("Ошибка загрузки состояния:", e);
-  }
-};
 
-  const load = async () => {
-    await loadSavedState();
-  };
-  
-  load();
-}, []);
+        const stateToSave = {
+          imagesData: imagesToSave,
+          logs,
+          currentImageId,
+          width,
+          height,
+          length,
+          color,
+          selectedLog,
+          globalMarkerSize,
+          documentNumber,
+          documentDate: documentDate.toISOString()
+        };
 
-useEffect(() => {
-  return () => {
-    // Очищаем все Blob URL при размонтировании
-    imagesData.forEach(img => {
-      if (img.image?.startsWith('blob:')) {
-        URL.revokeObjectURL(img.image);
+        await set(STORAGE_KEY, stateToSave);
+      } catch (e) {
+        console.error("Ошибка сохранения состояния:", e);
       }
-    });
+    };
+
+    const save = async () => {
+      await saveState();
+    };
     
-    Object.values(imageRefs.current).forEach(img => {
-      if (img.src?.startsWith('blob:')) {
-        URL.revokeObjectURL(img.src);
-      }
-    });
-    imageRefs.current = {};
-  };
-}, []);
+    save();
+  }, [imagesData, logs, currentImageId, width, height, length, color, selectedLog, globalMarkerSize, documentNumber, documentDate]);
 
+  useEffect(() => {
+    const loadSavedState = async () => {
+      try {
+        const savedState = await get(STORAGE_KEY);
+        if (savedState) {
+          setLogs(savedState.logs || []);
+          setCurrentImageId(savedState.currentImageId || null);
+          setWidth(savedState.width || '');
+          setHeight(savedState.height || '');
+          setLength(savedState.length || '');
+          setColor(savedState.color || colorPalette.accent);
+          setSelectedLog(savedState.selectedLog || null);
+          setGlobalMarkerSize(savedState.globalMarkerSize || (isMobile ? 40 : 20));
+          setDocumentNumber(savedState.documentNumber || '');
+          setDocumentDate(savedState.documentDate ? new Date(savedState.documentDate) : new Date());
+          
+          if (savedState.imagesData && savedState.imagesData.length > 0) {
+            const restoredImages = await Promise.all(
+              savedState.imagesData.map(async imgData => {
+                if (imgData.fileData) {
+                  try {
+                    const response = await fetch(imgData.fileData.data);
+                    const blob = await response.blob();
+                    const file = new File([blob], imgData.fileData.name, {
+                      type: imgData.fileData.type,
+                      lastModified: imgData.fileData.lastModified
+                    });
+                    
+                    const imageUrl = URL.createObjectURL(file);
+                    
+                    const img = new Image();
+                    img.src = imageUrl;
+                    imageRefs.current[imgData.id] = img;
+                    
+                    return {
+                      ...imgData,
+                      image: imageUrl,
+                      file: file,
+                      markerSize: imgData.markerSize || savedState.globalMarkerSize || (isMobile ? 40 : 20),
+                      isRemainder: imgData.isRemainder || false
+                    };
+                  } catch (e) {
+                    console.error("Ошибка восстановления файла:", e);
+                    return null;
+                  }
+                }
+                return null;
+              })
+            );
+            
+            setImagesData(restoredImages.filter(img => img !== null));
+          }
+        }
+      } catch (e) {
+        console.error("Ошибка загрузки состояния:", e);
+      }
+    };
+
+    const load = async () => {
+      await loadSavedState();
+    };
+    
+    load();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      imagesData.forEach(img => {
+        if (img.image?.startsWith('blob:')) {
+          URL.revokeObjectURL(img.image);
+        }
+      });
+      
+      Object.values(imageRefs.current).forEach(img => {
+        if (img.src?.startsWith('blob:')) {
+          URL.revokeObjectURL(img.src);
+        }
+      });
+      imageRefs.current = {};
+    };
+  }, []);
 
   const renderFormsSection = () => (
     <>
@@ -1509,7 +1334,6 @@ useEffect(() => {
                       {imgData.image ? (
                         <img src={imgData.image} alt="Превью" style={styles.imagePreview} 
                         onError={(e) => {
-                          // Если изображение не загрузилось, пытаемся создать новый Blob URL
                           if (imgData.file) {
                             const newUrl = URL.createObjectURL(imgData.file);
                             e.target.src = newUrl;
@@ -1929,6 +1753,23 @@ useEffect(() => {
                   style={{ accentColor: colorPalette.primary }}
                 />
               </Form.Group>
+
+              <Form.Group controlId="formIsRemainder" className="mb-3">
+                <Form.Check 
+                  type="checkbox"
+                  label="Это остаток (учитывать с минусом)"
+                  checked={currentImageId ? imagesData.find(img => img.id === currentImageId)?.isRemainder || false : false}
+                  onChange={(e) => {
+                    if (currentImageId) {
+                      setImagesData(prev => prev.map(img => 
+                        img.id === currentImageId
+                          ? { ...img, isRemainder: e.target.checked }
+                          : img
+                      ));
+                    }
+                  }}
+                />
+              </Form.Group>
             </div>
           </div>
           
@@ -1958,15 +1799,15 @@ useEffect(() => {
                 </thead>
                 <tbody>
                   {logs.map(log => {
-                    const count = currentImageId 
-                      ? imagesData.find(data => data.id === currentImageId)?.boardMarks.filter(mark => mark.logId === log.id).length 
-                      : 0;
+                    const currentImage = imagesData.find(data => data.id === currentImageId);
+                    const count = currentImage?.boardMarks.filter(mark => mark.logId === log.id).length || 0;
+                    const isRemainder = currentImage?.isRemainder || false;
+                    const multiplier = isRemainder ? -1 : 1;
+                    const plan = currentImage?.plans?.[log.id] ?? '';
                     
-                    // Skip if no marks and no plan for this log
-                    if (count === 0 && !imagesData.find(data => data.id === currentImageId)?.plans?.[log.id]) return null;
+                    if (count === 0 && !plan) return null;
                     
-                    const plan = imagesData.find(data => data.id === currentImageId)?.plans?.[log.id] ?? '';
-                    const deviation = count - (plan === '' ? 0 : plan);
+                    const deviation = (count - (plan === '' ? 0 : plan)) * multiplier;
                     const deviationColor = deviation > 0 ? '#ffcccc' : deviation < 0 ? '#ccffcc' : 'transparent';
                     
                     return (
@@ -1998,7 +1839,7 @@ useEffect(() => {
                             }}
                           />
                         </td>
-                        <td>{count}</td>
+                        <td>{count * multiplier}</td>
                         <td style={{ backgroundColor: deviationColor }}>
                           {deviation > 0 ? `+${deviation}` : deviation}
                         </td>
@@ -2011,15 +1852,30 @@ useEffect(() => {
                     <td colSpan="2" className="text-end fw-bold">Всего:</td>
                     <td className="fw-bold">
                       {Object.values(imagesData.find(data => data.id === currentImageId)?.plans || {})
-                        .reduce((sum, plan) => sum + (plan || 0), 0)}
+                        .reduce((sum, plan) => sum + (plan || 0), 0) *
+                        (imagesData.find(data => data.id === currentImageId)?.isRemainder ? -1 : 1)}
                     </td>
                     <td className="fw-bold">
-                      {currentImageId ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length || 0 : 0}
+                      {(
+                        (currentImageId 
+                          ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length || 0 
+                          : 0) * 
+                        (imagesData.find(data => data.id === currentImageId)?.isRemainder ? -1 : 1)
+                      )}
                     </td>
                     <td className="fw-bold">
-                      {(currentImageId ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length || 0 : 0) - 
-                      (Object.values(imagesData.find(data => data.id === currentImageId)?.plans || {}))
-                        .reduce((sum, plan) => sum + (plan || 0), 0)}
+                      {(
+                        (
+                          (currentImageId 
+                            ? imagesData.find(data => data.id === currentImageId)?.boardMarks.length || 0 
+                            : 0) * 
+                          (imagesData.find(data => data.id === currentImageId)?.isRemainder ? -1 : 1)
+                        ) - (
+                          Object.values(imagesData.find(data => data.id === currentImageId)?.plans || {})
+                            .reduce((sum, plan) => sum + (plan || 0), 0) * 
+                          (imagesData.find(data => data.id === currentImageId)?.isRemainder ? -1 : 1)
+                        )
+                      )}
                     </td>
                   </tr>
                 </tfoot>
